@@ -18,8 +18,8 @@
   };
 </script>
 
-<div class="space-y-8">
-  <div class="flex justify-between items-start">
+<div class="space-y-6 sm:space-y-8">
+  <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
     <div>
       <Typography variant="display" size="sm" as="h1" color="secondary">
         Training Plans
@@ -30,7 +30,7 @@
     </div>
     <Button
       variant={showForm ? "tertiary" : "primary"}
-      size="lg"
+      size="md"
       onclick={() => (showForm = !showForm)}
     >
       {showForm ? "Cancel" : "+ Create Plan"}
@@ -45,14 +45,14 @@
         use:enhance
         onsubmit={handleAddPlan}
       >
-        <div class="space-y-6">
+        <div class="space-y-4 sm:space-y-6">
           <div>
             <label for="name">
               <Typography variant="body" size="md" as="span" color="secondary">
                 Plan Name
               </Typography>
             </label>
-            <div class="mt-3">
+            <div class="mt-2 sm:mt-3">
               <Input
                 type="text"
                 id="name"
@@ -70,7 +70,7 @@
                 Description
               </Typography>
             </label>
-            <div class="mt-3">
+            <div class="mt-2 sm:mt-3">
               <Input
                 type="textarea"
                 id="description"
@@ -82,7 +82,7 @@
             </div>
           </div>
 
-          <div class="flex gap-4 pt-4">
+          <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 pt-2 sm:pt-4">
             <Button
               type="submit"
               variant="secondary"
@@ -112,7 +112,7 @@
   {#await data.plans}
     <div>Loading...</div>
   {:then plans}
-    <div class="space-y-4">
+    <div class="space-y-3 sm:space-y-4">
       {#if plans.length === 0}
         <Card>
           <Typography variant="body" size="md" color="tertiary" as="p">
@@ -123,8 +123,8 @@
         {#each plans as plan (plan.id)}
           <a href="/plans/{plan.id}" class="no-underline">
             <Card>
-              <div class="flex justify-between items-start">
-                <div class="flex-1">
+              <div class="flex flex-col gap-3 sm:gap-6 sm:flex-row sm:justify-between sm:items-start">
+                <div class="flex-1 min-w-0">
                   <Typography
                     variant="headline"
                     size="sm"
@@ -147,7 +147,7 @@
                     Created {new Date(plan.created_at).toLocaleDateString()}
                   </Typography>
                 </div>
-                <div class="ml-6">
+                <div class="ml-0 sm:ml-6 pt-2 sm:pt-0 flex-shrink-0">
                   <Typography variant="body" size="md" color="primary">
                     View →
                   </Typography>

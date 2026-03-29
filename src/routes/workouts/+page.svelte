@@ -18,8 +18,8 @@
   };
 </script>
 
-<div class="space-y-8">
-  <div class="flex justify-between items-start">
+<div class="space-y-6 sm:space-y-8">
+  <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
     <div>
       <Typography variant="display" size="sm" as="h1" color="primary">
         Your Workouts
@@ -30,7 +30,7 @@
     </div>
     <Button
       variant={showForm ? "tertiary" : "primary"}
-      size="lg"
+      size="md"
       onclick={() => (showForm = !showForm)}
     >
       {showForm ? "Cancel" : "+ Add Workout"}
@@ -45,7 +45,7 @@
         use:enhance
         onsubmit={handleAddWorkout}
       >
-        <div class="space-y-6">
+        <div class="space-y-4 sm:space-y-6">
           <div>
             <label for="name">
               <Typography
@@ -57,7 +57,7 @@
                 Workout Name
               </Typography>
             </label>
-            <div class="mt-3">
+            <div class="mt-2 sm:mt-3">
               <Input
                 type="text"
                 id="name"
@@ -75,7 +75,7 @@
                 Description
               </Typography>
             </label>
-            <div class="mt-3">
+            <div class="mt-2 sm:mt-3">
               <Input
                 type="textarea"
                 id="description"
@@ -87,7 +87,7 @@
             </div>
           </div>
 
-          <div class="flex gap-4 pt-4">
+          <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 pt-2 sm:pt-4">
             <Button
               type="submit"
               variant="secondary"
@@ -114,7 +114,7 @@
     </Card>
   {/if}
 
-  <div class="space-y-4">
+  <div class="space-y-3 sm:space-y-4">
     {#await data.workouts}
       <div>Loading...</div>
     {:then workouts}
@@ -132,8 +132,8 @@
       {:else}
         {#each workouts as workout (workout.id)}
           <Card>
-            <div class="flex justify-between items-start gap-6">
-              <div class="flex-1">
+            <div class="flex flex-col gap-3 sm:gap-6 sm:flex-row sm:justify-between sm:items-start">
+              <div class="flex-1 min-w-0">
                 <Typography
                   variant="headline"
                   size="sm"
@@ -153,7 +153,7 @@
                   </Typography>
                 {/if}
               </div>
-              <div class="flex gap-3 flex-shrink-0">
+              <div class="flex flex-col gap-2 sm:flex-row sm:gap-3 flex-shrink-0 w-full sm:w-auto">
                 <Button variant="tertiary" size="sm">Edit</Button>
                 <Button variant="tertiary" size="sm">Delete</Button>
               </div>

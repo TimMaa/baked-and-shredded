@@ -3,7 +3,7 @@
   import Typography from '$lib/components/Typography.svelte';
 </script>
 
-<div class="space-y-16">
+<div class="space-y-8 sm:space-y-12">
   <section>
     <Typography variant="display" size="lg" as="h1" color="primary">
       Your Digital Garden
@@ -13,7 +13,7 @@
     </Typography>
   </section>
 
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
     <a href="/workouts" class="no-underline">
       <Card hoverable>
         <div class="space-y-4">

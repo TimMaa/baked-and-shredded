@@ -33,7 +33,7 @@
   }
 </script>
 
-<div class="space-y-8">
+<div class="space-y-6 sm:space-y-8">
   <div>
     <Typography variant="display" size="sm" as="h1" color="tertiary">
       Execute Workout
@@ -47,7 +47,7 @@
     {#await data.plans}
       <div>Loading...</div>
     {:then plans}
-      <div class="space-y-6">
+      <div class="space-y-4 sm:space-y-6">
         <Card>
           <Typography variant="headline" size="md" as="h2" color="primary">
             Select Training Plan
@@ -60,10 +60,10 @@
               >
             </Typography>
           {:else}
-            <div class="space-y-3">
+            <div class="space-y-2 sm:space-y-3">
               {#each plans as plan (plan.id)}
                 <label
-                  class="flex items-center p-4 rounded-lg cursor-pointer transition-all"
+                  class="flex items-start p-3 sm:p-4 rounded-lg cursor-pointer transition-all"
                   class:selected={selectedPlan === plan.id}
                 >
                   <input
@@ -71,9 +71,9 @@
                     name="plan"
                     value={plan.id}
                     bind:group={selectedPlan}
-                    class="w-5 h-5"
+                    class="w-5 h-5 mt-0.5 flex-shrink-0"
                   />
-                  <div class="ml-4">
+                  <div class="ml-3 sm:ml-4 min-w-0">
                     <Typography
                       variant="body"
                       size="md"
@@ -104,11 +104,11 @@
             <Typography variant="headline" size="md" as="h2" color="secondary">
               Select Day
             </Typography>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2 sm:gap-3">
               {#each daysOfWeek as day (day)}
                 <button
                   onclick={() => (selectedDay = day)}
-                  class="p-4 rounded-lg font-semibold transition-all text-body-md"
+                  class="p-2 sm:p-3 rounded-lg font-semibold transition-all text-xs sm:text-body-md"
                   class:selected={selectedDay === day}
                 >
                   {day.substring(0, 3)}
@@ -118,7 +118,7 @@
           </Card>
 
           {#if selectedDay}
-            <Button variant="secondary" size="lg" onclick={startSession}>
+            <Button variant="secondary" size="md" onclick={startSession}>
               Start Workout - {selectedDay}
             </Button>
           {/if}
@@ -127,7 +127,7 @@
     {/await}
   {:else}
     <Card>
-      <div class="flex justify-between items-center mb-8">
+      <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8">
         <Typography variant="headline" size="lg" as="h2" color="primary">
           Workout Session - {selectedDay}
         </Typography>
@@ -136,7 +136,7 @@
         </Button>
       </div>
 
-      <div class="space-y-4">
+      <div class="space-y-3 sm:space-y-4">
         <Typography variant="body" size="md" color="tertiary" as="p">
           Workout tracking interface coming soon
         </Typography>
