@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+dist/
+build/
+.svelte-kit/
+*.log
+.env
+.env.local
+data/
+.vscode/settings.json
