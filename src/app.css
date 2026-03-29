@@ -74,7 +74,8 @@
   --radius-full: 9999px;
 }
 
-html, body {
+html,
+body {
   background-color: var(--surface);
   color: #e8e1d9;
   font-family: var(--font-body);
@@ -82,6 +83,7 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scrollbar-gutter: stable;
 }
 
 /* ===== TYPOGRAPHY SYSTEM ===== */
@@ -422,6 +424,7 @@ textarea::placeholder {
 
 /* Mobile-specific adjustments */
 @media (max-width: 639px) {
+
   /* Reduce typography sizes on mobile */
   .text-display-lg {
     font-size: 2rem;

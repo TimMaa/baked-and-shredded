@@ -56,6 +56,7 @@ function initializeSchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       description TEXT,
+      focus_areas TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -174,24 +175,41 @@ function dbRun(query: string, params: any[] = []) {
 }
 
 // Helper functions for workouts
-export async function createWorkout(name: string, description?: string) {
+function parseFocusAreas(workout: any) {
+  if (workout && workout.focus_areas) {
+    try {
+      workout.focus_areas = JSON.parse(workout.focus_areas);
+    } catch (e) {
+      workout.focus_areas = [];
+    }
+  } else if (workout) {
+    workout.focus_areas = [];
+  }
+  return workout;
+}
+
+export async function createWorkout(name: string, description?: string, focusAreas?: string[]) {
   await initDb();
-  dbRun('INSERT INTO workouts (name, description) VALUES (?, ?)', [name, description || null]);
+  const focusAreasJson = focusAreas ? JSON.stringify(focusAreas) : null;
+  dbRun('INSERT INTO workouts (name, description, focus_areas) VALUES (?, ?, ?)', [name, description || null, focusAreasJson]);
 }
 
 export async function getAllWorkouts() {
   await initDb();
-  return dbAll('SELECT * FROM workouts ORDER BY name');
+  const workouts = dbAll('SELECT * FROM workouts ORDER BY name');
+  return workouts.map(parseFocusAreas);
 }
 
 export async function getWorkout(id: number) {
   await initDb();
-  return dbGet('SELECT * FROM workouts WHERE id = ?', [id]);
+  const workout = dbGet('SELECT * FROM workouts WHERE id = ?', [id]);
+  return parseFocusAreas(workout);
 }
 
-export async function updateWorkout(id: number, name: string, description?: string) {
+export async function updateWorkout(id: number, name: string, description?: string, focusAreas?: string[]) {
   await initDb();
-  dbRun('UPDATE workouts SET name = ?, description = ? WHERE id = ?', [name, description || null, id]);
+  const focusAreasJson = focusAreas ? JSON.stringify(focusAreas) : null;
+  dbRun('UPDATE workouts SET name = ?, description = ?, focus_areas = ? WHERE id = ?', [name, description || null, focusAreasJson, id]);
 }
 
 export async function deleteWorkout(id: number) {
@@ -246,6 +264,11 @@ export async function getTrainingPlanWithWorkouts(id: number) {
 export async function deleteTrainingPlan(id: number) {
   await initDb();
   dbRun('DELETE FROM training_plans WHERE id = ?', [id]);
+}
+
+export async function updateTrainingPlan(id: number, name: string, description?: string) {
+  await initDb();
+  dbRun('UPDATE training_plans SET name = ?, description = ? WHERE id = ?', [name, description || null, id]);
 }
 
 // Helper functions for plan days
