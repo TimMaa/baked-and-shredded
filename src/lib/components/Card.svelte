@@ -9,8 +9,8 @@
 
   let { compact = false, hoverable = true, as = 'div', children }: Props & { children: any } = $props();
 
-  const cardClass = getDynamicClasses.card(compact);
-  const hoverClass = hoverable ? 'hover:shadow-lg' : '';
+  const cardClass = $derived(getDynamicClasses.card(compact));
+  const hoverClass = $derived(hoverable ? 'hover:shadow-lg' : '');
 </script>
 
 <svelte:element

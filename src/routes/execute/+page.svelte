@@ -50,11 +50,11 @@
       <div class="space-y-4 sm:space-y-6">
         <Card>
           <Typography variant="headline" size="md" as="h2" color="primary">
-            Select Training Plan
+            Select Workout
           </Typography>
           {#if workouts.length === 0}
             <Typography variant="body" size="md" color="tertiary" as="p">
-              No training workouts available. <a
+              No workouts available. <a
                 href="/plans"
                 class="text-primary hover:text-tertiary">Create one first</a
               >

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { flip } from "svelte/animate";
   import Button from "$lib/components/Button.svelte";
   import Card from "$lib/components/Card.svelte";
   import Typography from "$lib/components/Typography.svelte";
@@ -426,96 +427,98 @@
 
       <div class="space-y-3 sm:space-y-4" role="list" aria-label="Exercises in workout">
           {#each orderedExercises as exercise, index (exercise.id)}
-            <Card>
-              <div
-                class="space-y-3 exercise-card"
-                class:is-drag-over={dragOverExerciseId === exercise.id}
-                role="listitem"
-                draggable="true"
-                ondragstart={(event) => handleDragStart(event, exercise.id)}
-                ondragover={(event) => handleDragOver(event, exercise.id)}
-                ondrop={(event) => handleDrop(event, exercise.id)}
-                ondragend={handleDragEnd}
-              >
-              <div class="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start">
-                <div class="flex-1">
-                  <Typography variant="body" size="sm" color="tertiary" as="p">
-                    Order #{index + 1}
-                  </Typography>
-                  <Typography variant="headline" size="sm" as="h3" color="primary">
-                    {exercise.exercise_name}
-                  </Typography>
-                    {#if exercise.focus_areas}
-                    <div class="mt-2">
-                        <MuscleGroupCoverage muscleRatings={exercise.focus_areas} compact />
-                    </div>
-                  {/if}
+            <div animate:flip={{ duration: 220 }}>
+              <Card>
+                <div
+                  class="space-y-3 exercise-card"
+                  class:is-drag-over={dragOverExerciseId === exercise.id}
+                  role="listitem"
+                  draggable="true"
+                  ondragstart={(event) => handleDragStart(event, exercise.id)}
+                  ondragover={(event) => handleDragOver(event, exercise.id)}
+                  ondrop={(event) => handleDrop(event, exercise.id)}
+                  ondragend={handleDragEnd}
+                >
+                <div class="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start">
+                  <div class="flex-1">
+                    <Typography variant="body" size="sm" color="tertiary" as="p">
+                      Order #{index + 1}
+                    </Typography>
+                    <Typography variant="headline" size="sm" as="h3" color="primary">
+                      {exercise.exercise_name}
+                    </Typography>
+                      {#if exercise.focus_areas}
+                      <div class="mt-2">
+                          <MuscleGroupCoverage muscleRatings={exercise.focus_areas} compact />
+                      </div>
+                    {/if}
                 </div>
-                <div class="exercise-actions" aria-label={`Reorder ${exercise.exercise_name}`}>
-                  <Button
-                    type="button"
-                    variant="tertiary"
-                    size="sm"
-                    disabled={isSubmitting || index === 0}
-                    onclick={() => moveExerciseRelative(exercise.id, -1)}
-                  >
-                    Move Up
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="tertiary"
-                    size="sm"
-                    disabled={isSubmitting || index === orderedExercises.length - 1}
-                    onclick={() => moveExerciseRelative(exercise.id, 1)}
-                  >
-                    Move Down
-                  </Button>
-                  <form method="POST" action="?/removeExercise" style="display: contents;">
-                    <input type="hidden" name="exerciseId" value={exercise.id} />
+                  <div class="exercise-actions" aria-label={`Reorder ${exercise.exercise_name}`}>
                     <Button
-                      type="submit"
+                      type="button"
                       variant="tertiary"
                       size="sm"
-                      onclick={() => {
-                        if (!confirm(`Remove ${exercise.exercise_name} from this workout?`)) {
-                          event?.preventDefault();
-                        }
-                      }}
+                      disabled={isSubmitting || index === 0}
+                      onclick={() => moveExerciseRelative(exercise.id, -1)}
                     >
-                      Remove
+                      Move Up
                     </Button>
-                  </form>
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      size="sm"
+                      disabled={isSubmitting || index === orderedExercises.length - 1}
+                      onclick={() => moveExerciseRelative(exercise.id, 1)}
+                    >
+                      Move Down
+                    </Button>
+                    <form method="POST" action="?/removeExercise" style="display: contents;">
+                      <input type="hidden" name="exerciseId" value={exercise.id} />
+                      <Button
+                        type="submit"
+                        variant="tertiary"
+                        size="sm"
+                        onclick={() => {
+                          if (!confirm(`Remove ${exercise.exercise_name} from this workout?`)) {
+                            event?.preventDefault();
+                          }
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </form>
+                  </div>
                 </div>
-              </div>
 
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div class="bg-surface-container-low p-3 rounded-lg">
-                  <Typography variant="body" size="sm" color="tertiary" as="p">
-                    SETS
-                  </Typography>
-                  <Typography variant="headline" size="md" color="primary" as="p">
-                    {exercise.sets}
-                  </Typography>
-                </div>
-                <div class="bg-surface-container-low p-3 rounded-lg">
-                  <Typography variant="body" size="sm" color="tertiary" as="p">
-                    REPS
-                  </Typography>
-                  <Typography variant="headline" size="md" color="primary" as="p">
-                    {exercise.target_reps}
-                  </Typography>
-                </div>
-                <div class="bg-surface-container-low p-3 rounded-lg">
-                  <Typography variant="body" size="sm" color="tertiary" as="p">
-                    {exercise.target_unit === 's' ? 'TIME / REP' : 'WEIGHT / REP'}
-                  </Typography>
-                  <Typography variant="headline" size="md" color="primary" as="p">
-                    {exercise.target_weight ?? '—'}{exercise.target_weight == null ? '' : exercise.target_unit}
-                  </Typography>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div class="bg-surface-container-low p-3 rounded-lg">
+                    <Typography variant="body" size="sm" color="tertiary" as="p">
+                      SETS
+                    </Typography>
+                    <Typography variant="headline" size="md" color="primary" as="p">
+                      {exercise.sets}
+                    </Typography>
+                  </div>
+                  <div class="bg-surface-container-low p-3 rounded-lg">
+                    <Typography variant="body" size="sm" color="tertiary" as="p">
+                      REPS
+                    </Typography>
+                    <Typography variant="headline" size="md" color="primary" as="p">
+                      {exercise.target_reps}
+                    </Typography>
+                  </div>
+                  <div class="bg-surface-container-low p-3 rounded-lg">
+                    <Typography variant="body" size="sm" color="tertiary" as="p">
+                      {exercise.target_unit === 's' ? 'TIME / REP' : 'WEIGHT / REP'}
+                    </Typography>
+                    <Typography variant="headline" size="md" color="primary" as="p">
+                      {exercise.target_weight ?? '—'}{exercise.target_weight == null ? '' : exercise.target_unit}
+                    </Typography>
+                  </div>
                 </div>
               </div>
+              </Card>
             </div>
-          </Card>
         {/each}
       </div>
     {/if}

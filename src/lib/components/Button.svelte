@@ -20,7 +20,7 @@
     children,
   }: Props & { children: any } = $props();
 
-  const buttonClass = getDynamicClasses.button(variant, size);
+  const buttonClass = $derived(getDynamicClasses.button(variant, size));
 </script>
 
 <button {type} disabled={disabled || loading} {onclick} class={buttonClass}>
