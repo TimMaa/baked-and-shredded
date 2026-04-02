@@ -1,36 +1,373 @@
 <script lang="ts">
   import Button from "$lib/components/Button.svelte";
   import Card from "$lib/components/Card.svelte";
+  import Input from "$lib/components/Input.svelte";
   import Typography from "$lib/components/Typography.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
-  let selectedPlan = $state<number | null>(null);
-  let selectedDay = $state<string | null>(null);
-  let sessionStarted = $state(false);
+  type WorkoutExercise = {
+    id: number;
+    exercise_id: number;
+    exercise_name: string;
+    sets: number;
+    target_reps: number;
+    target_weight: number | null;
+    target_unit: string;
+  };
 
-  const daysOfWeek = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-  ];
+  type Workout = {
+    id: number;
+    name: string;
+    description?: string;
+    exercises: WorkoutExercise[];
+  };
+
+  type SetQueueItem = {
+    workoutExerciseId: number;
+    exerciseId: number;
+    exerciseName: string;
+    setNumber: number;
+    totalSets: number;
+    targetReps: number;
+    targetWeight: number | null;
+    targetUnit: string;
+  };
+
+  type CompletedSet = SetQueueItem & {
+    actualReps: number;
+    actualWeight: number | null;
+    status: "expected" | "deviation";
+  };
+
+  type ExecutionStyle = "byExercise" | "staggered";
+
+  const workouts = $derived((data.workouts as Workout[]) ?? []);
+
+  let selectedWorkoutId = $state<number | null>(null);
+  let executionStyle = $state<ExecutionStyle>("staggered");
+  let sessionStarted = $state(false);
+  let sessionStartedAt = $state<Date | null>(null);
+  let pendingSets = $state<SetQueueItem[]>([]);
+  let completedSets = $state<CompletedSet[]>([]);
+  let showDeviationForm = $state(false);
+  let deviationReps = $state("");
+  let deviationWeight = $state("");
+  let deviationError = $state<string | null>(null);
+  let stopwatchElapsedMs = $state(0);
+  let stopwatchRunning = $state(false);
+  let stopwatchAnchorMs = $state<number | null>(null);
+
+  const selectedWorkout = $derived(
+    workouts.find((workout) => Number(workout.id) === selectedWorkoutId) ?? null
+  );
+
+  const currentSet = $derived(pendingSets[0] ?? null);
+  const currentSetKey = $derived(
+    currentSet
+      ? `${currentSet.workoutExerciseId}-${currentSet.setNumber}`
+      : ""
+  );
+
+  const totalSetCount = $derived(
+    pendingSets.length + completedSets.length
+  );
+
+  const completionCount = $derived(completedSets.length);
+
+  const isWorkoutComplete = $derived(
+    sessionStarted && pendingSets.length === 0
+  );
+
+  const isTimeBasedSet = $derived(currentSet?.targetUnit === "s");
+
+  const stopwatchSeconds = $derived(Math.round(stopwatchElapsedMs / 1000));
+
+  const stopwatchSecondsPrecise = $derived(
+    Number((stopwatchElapsedMs / 1000).toFixed(2))
+  );
+
+  const stopwatchDisplay = $derived.by(() => {
+    const totalSeconds = Math.floor(stopwatchElapsedMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const centiseconds = Math.floor((stopwatchElapsedMs % 1000) / 10);
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
+  });
+
+  function buildByExerciseQueue(workout: Workout): SetQueueItem[] {
+    const queue: SetQueueItem[] = [];
+
+    for (const exercise of workout.exercises) {
+      for (let setNumber = 1; setNumber <= exercise.sets; setNumber += 1) {
+        queue.push({
+          workoutExerciseId: Number(exercise.id),
+          exerciseId: Number(exercise.exercise_id),
+          exerciseName: exercise.exercise_name,
+          setNumber,
+          totalSets: Number(exercise.sets),
+          targetReps: Number(exercise.target_reps),
+          targetWeight:
+            exercise.target_weight == null ? null : Number(exercise.target_weight),
+          targetUnit: exercise.target_unit || "kg",
+        });
+      }
+    }
+
+    return queue;
+  }
+
+  function buildStaggeredQueue(workout: Workout): SetQueueItem[] {
+    const queue: SetQueueItem[] = [];
+    const exercises = workout.exercises;
+    const exerciseCount = exercises.length;
+
+    if (exerciseCount === 0) {
+      return queue;
+    }
+
+    const maxSets = Math.max(...exercises.map((exercise) => Number(exercise.sets)));
+
+    // Diagonal traversal produces interleaved order like 112123234... for equal set counts.
+    for (let diagonal = 2; diagonal <= exerciseCount + maxSets; diagonal += 1) {
+      for (let exerciseIndex = 1; exerciseIndex <= exerciseCount; exerciseIndex += 1) {
+        const exercise = exercises[exerciseIndex - 1];
+        const setNumber = diagonal - exerciseIndex;
+
+        if (setNumber < 1 || setNumber > Number(exercise.sets)) {
+          continue;
+        }
+
+        queue.push({
+          workoutExerciseId: Number(exercise.id),
+          exerciseId: Number(exercise.exercise_id),
+          exerciseName: exercise.exercise_name,
+          setNumber,
+          totalSets: Number(exercise.sets),
+          targetReps: Number(exercise.target_reps),
+          targetWeight:
+            exercise.target_weight == null ? null : Number(exercise.target_weight),
+          targetUnit: exercise.target_unit || "kg",
+        });
+      }
+    }
+
+    return queue;
+  }
+
+  function buildExecutionQueue(workout: Workout, style: ExecutionStyle): SetQueueItem[] {
+    if (style === "byExercise") {
+      return buildByExerciseQueue(workout);
+    }
+
+    return buildStaggeredQueue(workout);
+  }
 
   function startSession() {
-    if (selectedPlan && selectedDay) {
-      sessionStarted = true;
+    if (!selectedWorkout || selectedWorkout.exercises.length === 0) {
+      return;
     }
+
+    const queue = buildExecutionQueue(selectedWorkout, executionStyle);
+
+    pendingSets = queue;
+    completedSets = [];
+    showDeviationForm = false;
+    deviationReps = "";
+    deviationWeight = "";
+    deviationError = null;
+    stopwatchElapsedMs = 0;
+    stopwatchRunning = false;
+    stopwatchAnchorMs = null;
+    sessionStartedAt = new Date();
+    sessionStarted = true;
   }
 
   function endSession() {
     sessionStarted = false;
-    selectedPlan = null;
-    selectedDay = null;
+    selectedWorkoutId = null;
+    sessionStartedAt = null;
+    pendingSets = [];
+    completedSets = [];
+    showDeviationForm = false;
+    deviationReps = "";
+    deviationWeight = "";
+    deviationError = null;
+    stopwatchElapsedMs = 0;
+    stopwatchRunning = false;
+    stopwatchAnchorMs = null;
   }
+
+  function completeCurrentSet(status: "expected" | "deviation", reps: number, weight: number | null) {
+    const activeSet = pendingSets[0];
+    if (!activeSet) {
+      return;
+    }
+
+    completedSets = [
+      ...completedSets,
+      {
+        ...activeSet,
+        actualReps: reps,
+        actualWeight: weight,
+        status,
+      },
+    ];
+
+    pendingSets = pendingSets.slice(1);
+    showDeviationForm = false;
+    deviationReps = "";
+    deviationWeight = "";
+    deviationError = null;
+  }
+
+  function startStopwatch() {
+    if (stopwatchRunning) {
+      return;
+    }
+
+    stopwatchAnchorMs = Date.now() - stopwatchElapsedMs;
+    stopwatchRunning = true;
+  }
+
+  function pauseStopwatch() {
+    stopwatchRunning = false;
+  }
+
+  function resetStopwatch() {
+    stopwatchRunning = false;
+    stopwatchElapsedMs = 0;
+    stopwatchAnchorMs = null;
+  }
+
+  function useStopwatchTimeForDeviation() {
+    deviationWeight = String(stopwatchSecondsPrecise);
+  }
+
+  function completeAtStopwatchTime() {
+    if (!currentSet || currentSet.targetUnit !== "s") {
+      return;
+    }
+
+    const trackedSeconds = stopwatchSecondsPrecise;
+    const targetSeconds = currentSet.targetWeight;
+    const isExpected =
+      targetSeconds != null && Math.abs(targetSeconds - trackedSeconds) < 0.01;
+
+    completeCurrentSet(
+      isExpected ? "expected" : "deviation",
+      currentSet.targetReps,
+      trackedSeconds
+    );
+  }
+
+  function confirmExpectedSet() {
+    if (!currentSet) {
+      return;
+    }
+
+    completeCurrentSet("expected", currentSet.targetReps, currentSet.targetWeight);
+  }
+
+  function saveDeviation() {
+    if (!currentSet) {
+      return;
+    }
+
+    const reps = Number.parseInt(deviationReps, 10);
+    if (!Number.isFinite(reps) || reps <= 0) {
+      deviationError = "Please enter a valid reps value greater than 0.";
+      return;
+    }
+
+    let weight: number | null = currentSet.targetWeight;
+    const trimmedWeight = deviationWeight.trim();
+    if (trimmedWeight.length > 0) {
+      const parsedWeight = Number.parseFloat(trimmedWeight);
+      if (!Number.isFinite(parsedWeight) || parsedWeight < 0) {
+        deviationError = "Weight must be empty or a valid number.";
+        return;
+      }
+      weight = parsedWeight;
+    }
+
+    completeCurrentSet("deviation", reps, weight);
+  }
+
+  function skipCurrentSetForNow() {
+    if (pendingSets.length <= 1) {
+      return;
+    }
+
+    const first = pendingSets[0];
+    if (!first) {
+      return;
+    }
+
+    // Move the active set back by one position, but keep a leading block of
+    // same-exercise sets together when two or more are queued consecutively.
+    let groupLength = 1;
+    while (
+      groupLength < pendingSets.length &&
+      pendingSets[groupLength].exerciseId === first.exerciseId
+    ) {
+      groupLength += 1;
+    }
+
+    if (groupLength >= pendingSets.length) {
+      return;
+    }
+
+    const groupedCurrent = pendingSets.slice(0, groupLength);
+    const nextSet = pendingSets[groupLength];
+    const tail = pendingSets.slice(groupLength + 1);
+    pendingSets = [nextSet, ...groupedCurrent, ...tail];
+
+    showDeviationForm = false;
+    deviationReps = "";
+    deviationWeight = "";
+    deviationError = null;
+  }
+
+  const formattedSessionStartedAt = $derived(
+    sessionStartedAt
+      ? new Intl.DateTimeFormat(undefined, {
+          weekday: "long",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(sessionStartedAt)
+      : ""
+  );
+
+  const progressLabel = $derived(
+    totalSetCount === 0
+      ? "0/0"
+      : `${completionCount} / ${totalSetCount} sets complete`
+  );
+
+  $effect(() => {
+    currentSetKey;
+    resetStopwatch();
+  });
+
+  $effect(() => {
+    if (!stopwatchRunning || stopwatchAnchorMs == null) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (stopwatchAnchorMs == null) {
+        return;
+      }
+
+      stopwatchElapsedMs = Date.now() - stopwatchAnchorMs;
+    }, 50);
+
+    return () => window.clearInterval(intervalId);
+  });
 </script>
 
 <div class="space-y-6 sm:space-y-8">
@@ -44,106 +381,314 @@
   </div>
 
   {#if !sessionStarted}
-    {#await data.workouts}
-      <div>Loading...</div>
-    {:then workouts}
-      <div class="space-y-4 sm:space-y-6">
-        <Card>
-          <Typography variant="headline" size="md" as="h2" color="primary">
-            Select Workout
+    <div class="space-y-4 sm:space-y-6">
+      <Card>
+        <Typography variant="headline" size="md" as="h2" color="primary">
+          Select Workout
+        </Typography>
+        {#if workouts.length === 0}
+          <Typography variant="body" size="md" color="tertiary" as="p">
+            No workouts available. <a
+              href="/plans"
+              class="text-primary hover:text-tertiary">Create one first</a
+            >
           </Typography>
-          {#if workouts.length === 0}
-            <Typography variant="body" size="md" color="tertiary" as="p">
-              No workouts available. <a
-                href="/plans"
-                class="text-primary hover:text-tertiary">Create one first</a
+        {:else}
+          <div class="space-y-2 sm:space-y-3">
+            {#each workouts as workout (workout.id)}
+              <label
+                class="flex items-start p-3 sm:p-4 rounded-lg cursor-pointer transition-all"
+                class:selected={selectedWorkoutId === workout.id}
               >
-            </Typography>
-          {:else}
-            <div class="space-y-2 sm:space-y-3">
-              {#each workouts as plan (plan.id)}
-                <label
-                  class="flex items-start p-3 sm:p-4 rounded-lg cursor-pointer transition-all"
-                  class:selected={selectedPlan === plan.id}
-                >
-                  <input
-                    type="radio"
-                    name="plan"
-                    value={plan.id}
-                    bind:group={selectedPlan}
-                    class="w-5 h-5 mt-0.5 shrink-0"
-                  />
-                  <div class="ml-3 sm:ml-4 min-w-0">
+                <input
+                  type="radio"
+                  name="workout"
+                  value={workout.id}
+                  bind:group={selectedWorkoutId}
+                  class="w-5 h-5 mt-0.5 shrink-0"
+                />
+                <div class="ml-3 sm:ml-4 min-w-0">
+                  <Typography
+                    variant="body"
+                    size="md"
+                    as="span"
+                    color={selectedWorkoutId === workout.id ? "primary" : "default"}
+                  >
+                    {workout.name}
+                  </Typography>
+                  {#if workout.description}
                     <Typography
                       variant="body"
-                      size="md"
-                      as="span"
-                      color={selectedPlan === plan.id ? "primary" : "default"}
+                      size="sm"
+                      color="tertiary"
+                      as="p"
                     >
-                      {plan.name}
+                      {workout.description}
                     </Typography>
-                    {#if plan.description}
-                      <Typography
-                        variant="body"
-                        size="sm"
-                        color="tertiary"
-                        as="p"
-                      >
-                        {plan.description}
-                      </Typography>
-                    {/if}
-                  </div>
-                </label>
-              {/each}
-            </div>
-          {/if}
-        </Card>
-
-        {#if selectedPlan}
-          <Card>
-            <Typography variant="headline" size="md" as="h2" color="secondary">
-              Select Day
-            </Typography>
-            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2 sm:gap-3">
-              {#each daysOfWeek as day (day)}
-                <button
-                  onclick={() => (selectedDay = day)}
-                  class="p-2 sm:p-3 rounded-lg font-semibold transition-all text-xs sm:text-body-md"
-                  class:selected={selectedDay === day}
-                >
-                  {day.substring(0, 3)}
-                </button>
-              {/each}
-            </div>
-          </Card>
-
-          {#if selectedDay}
-            <Button variant="secondary" size="md" onclick={startSession}>
-              Start Workout - {selectedDay}
-            </Button>
-          {/if}
+                  {/if}
+                  <Typography variant="body" size="sm" color="tertiary" as="p">
+                    {workout.exercises.length} exercises
+                  </Typography>
+                </div>
+              </label>
+            {/each}
+          </div>
         {/if}
-      </div>
-    {/await}
+      </Card>
+
+      {#if selectedWorkoutId}
+        <Card>
+          <Typography variant="headline" size="sm" as="h2" color="primary">
+            Set Order
+          </Typography>
+          <div class="space-y-3 mt-3">
+            <label class="flex items-start p-3 rounded-lg cursor-pointer transition-all" class:selected={executionStyle === "staggered"}>
+              <input
+                type="radio"
+                name="executionStyle"
+                value="staggered"
+                checked={executionStyle === "staggered"}
+                onchange={() => (executionStyle = "staggered")}
+                class="w-5 h-5 mt-0.5 shrink-0"
+              />
+              <div class="ml-3 min-w-0">
+                <Typography variant="body" size="md" as="span" color="primary">
+                  Staggered (recommended)
+                </Typography>
+                <Typography variant="body" size="sm" color="tertiary" as="p">
+                  Interleaves sets across exercises, e.g. 112123234345455.
+                </Typography>
+              </div>
+            </label>
+
+            <label class="flex items-start p-3 rounded-lg cursor-pointer transition-all" class:selected={executionStyle === "byExercise"}>
+              <input
+                type="radio"
+                name="executionStyle"
+                value="byExercise"
+                checked={executionStyle === "byExercise"}
+                onchange={() => (executionStyle = "byExercise")}
+                class="w-5 h-5 mt-0.5 shrink-0"
+              />
+              <div class="ml-3 min-w-0">
+                <Typography variant="body" size="md" as="span" color="primary">
+                  By Exercise
+                </Typography>
+                <Typography variant="body" size="sm" color="tertiary" as="p">
+                  Finishes all sets of each exercise before moving to the next.
+                </Typography>
+              </div>
+            </label>
+          </div>
+        </Card>
+      {/if}
+
+      {#if selectedWorkoutId}
+        <Button
+          variant="secondary"
+          size="md"
+          onclick={startSession}
+          disabled={!selectedWorkout || selectedWorkout.exercises.length === 0}
+        >
+          Start Workout Now
+        </Button>
+      {/if}
+    </div>
   {:else}
     <Card>
       <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8">
-        <Typography variant="headline" size="lg" as="h2" color="primary">
-          Workout Session - {selectedDay}
-        </Typography>
+        <div>
+          <Typography variant="headline" size="lg" as="h2" color="primary">
+            {selectedWorkout?.name ?? "Workout Session"}
+          </Typography>
+          <Typography variant="body" size="sm" color="tertiary" as="p">
+            {progressLabel}
+          </Typography>
+          <Typography variant="body" size="sm" color="tertiary" as="p">
+            Order: {executionStyle === "staggered" ? "Staggered" : "By Exercise"}
+          </Typography>
+        </div>
         <Button variant="tertiary" size="md" onclick={endSession}>
           End Session
         </Button>
       </div>
 
-      <div class="space-y-3 sm:space-y-4">
-        <Typography variant="body" size="md" color="tertiary" as="p">
-          Workout tracking interface coming soon
-        </Typography>
-        <Typography variant="body" size="sm" color="tertiary" as="p">
-          Track each exercise with reps and weight lifted
-        </Typography>
-      </div>
+      <Typography variant="body" size="md" color="secondary" as="p">
+        Started: {formattedSessionStartedAt}
+      </Typography>
+
+      {#if isWorkoutComplete}
+        <div class="mt-6 space-y-3 sm:space-y-4">
+          <Typography variant="headline" size="sm" as="h3" color="primary">
+            Workout complete
+          </Typography>
+          <Typography variant="body" size="md" color="tertiary" as="p">
+            All planned sets are completed.
+          </Typography>
+        </div>
+      {:else if currentSet}
+        <div class="mt-6 space-y-5 sm:space-y-6">
+          <div class="active-set border rounded-lg p-4 sm:p-5">
+            <Typography variant="headline" size="sm" as="h3" color="primary">
+              {currentSet.exerciseName}
+            </Typography>
+            <Typography variant="body" size="sm" color="tertiary" as="p">
+              Set {currentSet.setNumber} of {currentSet.totalSets}
+            </Typography>
+
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="expected-chip">
+                <span class="chip-label">Expected reps</span>
+                <strong>{currentSet.targetReps}</strong>
+              </div>
+              <div class="expected-chip">
+                <span class="chip-label">Expected amount</span>
+                <strong>
+                  {#if currentSet.targetWeight == null}
+                    Bodyweight
+                  {:else}
+                    {currentSet.targetWeight} {currentSet.targetUnit}
+                  {/if}
+                </strong>
+              </div>
+            </div>
+
+            {#if isTimeBasedSet}
+              <div class="stopwatch-panel mt-4 rounded-lg p-4">
+                <Typography variant="body" size="sm" as="p" color="secondary">
+                  Stopwatch
+                </Typography>
+                <div class="stopwatch-readout" aria-live="polite">{stopwatchDisplay}</div>
+                <div class="flex flex-wrap gap-2 mt-3">
+                  <Button variant="secondary" size="sm" onclick={startStopwatch} disabled={stopwatchRunning}>
+                    Start
+                  </Button>
+                  <Button variant="tertiary" size="sm" onclick={pauseStopwatch} disabled={!stopwatchRunning}>
+                    Pause
+                  </Button>
+                  <Button variant="tertiary" size="sm" onclick={resetStopwatch}>
+                    Reset
+                  </Button>
+                </div>
+              </div>
+            {/if}
+          </div>
+
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button variant="secondary" size="md" onclick={confirmExpectedSet}>
+              Confirm Expected
+            </Button>
+            {#if isTimeBasedSet}
+              <Button variant="secondary" size="md" onclick={completeAtStopwatchTime}>
+                Complete At Stopwatch Time
+              </Button>
+            {/if}
+            <Button
+              variant="primary"
+              size="md"
+              onclick={() => {
+                showDeviationForm = !showDeviationForm;
+                deviationError = null;
+                if (showDeviationForm && currentSet) {
+                  deviationReps = String(currentSet.targetReps);
+                  deviationWeight = currentSet.targetWeight == null ? "" : String(currentSet.targetWeight);
+                }
+              }}
+            >
+              {showDeviationForm ? "Cancel Deviation" : "Record Deviation"}
+            </Button>
+            <Button
+              variant="tertiary"
+              size="md"
+              onclick={skipCurrentSetForNow}
+              disabled={pendingSets.length <= 1}
+            >
+              Postpone (Next Up)
+            </Button>
+          </div>
+
+          {#if showDeviationForm}
+            <div class="deviation-form border rounded-lg p-4 sm:p-5 space-y-4">
+              <div>
+                <label for="deviation-reps">
+                  <Typography variant="body" size="sm" as="span" color="secondary">
+                    Actual reps
+                  </Typography>
+                </label>
+                <div class="mt-2">
+                  <Input
+                    id="deviation-reps"
+                    name="deviation-reps"
+                    type="number"
+                    min={1}
+                    step={1}
+                    bind:value={deviationReps}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label for="deviation-weight">
+                  <Typography variant="body" size="sm" as="span" color="secondary">
+                    Actual amount ({currentSet.targetUnit})
+                  </Typography>
+                </label>
+                <div class="mt-2">
+                  <Input
+                    id="deviation-weight"
+                    name="deviation-weight"
+                    type="number"
+                    min={0}
+                    step={currentSet.targetUnit === "s" ? 0.01 : 0.5}
+                    bind:value={deviationWeight}
+                  />
+                </div>
+                {#if currentSet.targetUnit === "s"}
+                  <div class="mt-2">
+                    <Button variant="tertiary" size="sm" onclick={useStopwatchTimeForDeviation}>
+                      Use Stopwatch ({stopwatchSecondsPrecise}s)
+                    </Button>
+                  </div>
+                {/if}
+              </div>
+
+              {#if deviationError}
+                <Typography variant="body" size="sm" color="tertiary" as="p">
+                  {deviationError}
+                </Typography>
+              {/if}
+
+              <Button variant="secondary" size="md" onclick={saveDeviation}>
+                Save Deviation
+              </Button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      {#if completedSets.length > 0}
+        <div class="mt-6">
+          <Typography variant="headline" size="sm" as="h3" color="primary">
+            Completed Sets
+          </Typography>
+          <div class="mt-3 space-y-2">
+            {#each completedSets.slice(-5).reverse() as setItem, index (`${setItem.workoutExerciseId}-${setItem.setNumber}-${index}`)}
+              <div class="completed-set rounded-lg p-3">
+                <Typography variant="body" size="sm" as="p" color="secondary">
+                  {setItem.exerciseName} • Set {setItem.setNumber}/{setItem.totalSets}
+                </Typography>
+                <Typography variant="body" size="sm" as="p" color="tertiary">
+                  {setItem.actualReps} reps
+                  {#if setItem.actualWeight != null}
+                    • {setItem.actualWeight} {setItem.targetUnit}
+                  {/if}
+                  • {setItem.status === "expected" ? "as expected" : "deviation"}
+                </Typography>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </Card>
   {/if}
 </div>
@@ -153,9 +698,51 @@
     background-color: var(--surface-container);
   }
 
-  button.selected {
-    background-color: var(--secondary-container);
-    color: var(--on-secondary);
+  .active-set {
+    border-color: var(--secondary);
+    background-color: var(--surface-container-low);
+  }
+
+  .expected-chip {
+    border: 1px solid var(--outline-variant);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    background-color: var(--surface-container-high);
+  }
+
+  .expected-chip strong {
+    display: block;
+    font-size: 1.15rem;
+    color: var(--primary);
+  }
+
+  .chip-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--tertiary);
+  }
+
+  .deviation-form {
+    border-color: var(--outline-variant);
+    background-color: var(--surface-container-low);
+  }
+
+  .completed-set {
+    background-color: var(--surface-container-low);
+  }
+
+  .stopwatch-panel {
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-container-high);
+  }
+
+  .stopwatch-readout {
+    margin-top: 0.25rem;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--primary);
+    font-variant-numeric: tabular-nums;
   }
 
   a {
