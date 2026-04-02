@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { invalidateAll } from "$app/navigation";
   import Button from "$lib/components/Button.svelte";
   import Card from "$lib/components/Card.svelte";
   import Input from "$lib/components/Input.svelte";
@@ -47,6 +48,8 @@
 
   let selectedWorkoutId = $state<number | null>(null);
   let executionStyle = $state<ExecutionStyle>("staggered");
+  let currentSessionId = $state<number | null>(null);
+  let persistenceError = $state<string | null>(null);
   let sessionStarted = $state(false);
   let sessionStartedAt = $state<Date | null>(null);
   let pendingSets = $state<SetQueueItem[]>([]);
@@ -107,7 +110,7 @@
           exerciseName: exercise.exercise_name,
           setNumber,
           totalSets: Number(exercise.sets),
-          targetReps: Number(exercise.target_reps),
+          targetReps: (exercise.target_unit || "kg") === "s" ? 1 : Number(exercise.target_reps),
           targetWeight:
             exercise.target_weight == null ? null : Number(exercise.target_weight),
           targetUnit: exercise.target_unit || "kg",
@@ -145,7 +148,7 @@
           exerciseName: exercise.exercise_name,
           setNumber,
           totalSets: Number(exercise.sets),
-          targetReps: Number(exercise.target_reps),
+          targetReps: (exercise.target_unit || "kg") === "s" ? 1 : Number(exercise.target_reps),
           targetWeight:
             exercise.target_weight == null ? null : Number(exercise.target_weight),
           targetUnit: exercise.target_unit || "kg",
@@ -164,15 +167,48 @@
     return buildStaggeredQueue(workout);
   }
 
-  function startSession() {
+  async function postSessionAction(payload: Record<string, unknown>) {
+    const response = await fetch("/execute/session", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to save workout session data.");
+    }
+
+    return response.json();
+  }
+
+  async function startSession() {
     if (!selectedWorkout || selectedWorkout.exercises.length === 0) {
       return;
     }
 
     const queue = buildExecutionQueue(selectedWorkout, executionStyle);
 
+    if (queue.length === 0) {
+      return;
+    }
+
+    const sessionData = await postSessionAction({
+      action: "start",
+      workoutId: Number(selectedWorkout.id),
+      executionStyle,
+      totalSetsPlanned: queue.length,
+    });
+
+    if (!sessionData || typeof sessionData.sessionId !== "number" || sessionData.sessionId <= 0) {
+      throw new Error("Unable to initialize workout session storage.");
+    }
+
     pendingSets = queue;
     completedSets = [];
+    currentSessionId = sessionData.sessionId;
+    persistenceError = null;
     showDeviationForm = false;
     deviationReps = "";
     deviationWeight = "";
@@ -184,9 +220,22 @@
     sessionStarted = true;
   }
 
-  function endSession() {
+  async function endSession() {
+    if (currentSessionId != null) {
+      try {
+        await postSessionAction({
+          action: "complete",
+          sessionId: currentSessionId,
+          setsCompleted: completedSets.length,
+        });
+      } catch {
+        persistenceError = "Session ended locally, but final results were not saved to the database.";
+      }
+    }
+
     sessionStarted = false;
     selectedWorkoutId = null;
+    currentSessionId = null;
     sessionStartedAt = null;
     pendingSets = [];
     completedSets = [];
@@ -197,13 +246,18 @@
     stopwatchElapsedMs = 0;
     stopwatchRunning = false;
     stopwatchAnchorMs = null;
+
+    await invalidateAll();
   }
 
-  function completeCurrentSet(status: "expected" | "deviation", reps: number, weight: number | null) {
+  async function completeCurrentSet(status: "expected" | "deviation", reps: number, weight: number | null) {
     const activeSet = pendingSets[0];
     if (!activeSet) {
       return;
     }
+
+    const nextCompletedCount = completedSets.length + 1;
+    const hasRemainingAfterCompletion = pendingSets.length > 1;
 
     completedSets = [
       ...completedSets,
@@ -220,6 +274,35 @@
     deviationReps = "";
     deviationWeight = "";
     deviationError = null;
+
+    if (currentSessionId != null) {
+      try {
+        await postSessionAction({
+          action: "set",
+          sessionId: currentSessionId,
+          workoutExerciseId: activeSet.workoutExerciseId,
+          exerciseId: activeSet.exerciseId,
+          setNumber: activeSet.setNumber,
+          targetReps: activeSet.targetReps,
+          targetWeight: activeSet.targetWeight,
+          targetUnit: activeSet.targetUnit,
+          actualReps: reps,
+          actualWeight: weight,
+          status,
+        });
+
+        if (!hasRemainingAfterCompletion) {
+          await postSessionAction({
+            action: "complete",
+            sessionId: currentSessionId,
+            setsCompleted: nextCompletedCount,
+          });
+          await invalidateAll();
+        }
+      } catch {
+        persistenceError = "Set completed locally, but could not be written to the database.";
+      }
+    }
   }
 
   function startStopwatch() {
@@ -245,7 +328,7 @@
     deviationWeight = String(stopwatchSecondsPrecise);
   }
 
-  function completeAtStopwatchTime() {
+  async function completeAtStopwatchTime() {
     if (!currentSet || currentSet.targetUnit !== "s") {
       return;
     }
@@ -255,28 +338,32 @@
     const isExpected =
       targetSeconds != null && Math.abs(targetSeconds - trackedSeconds) < 0.01;
 
-    completeCurrentSet(
+    await completeCurrentSet(
       isExpected ? "expected" : "deviation",
-      currentSet.targetReps,
+      1,
       trackedSeconds
     );
   }
 
-  function confirmExpectedSet() {
+  async function confirmExpectedSet() {
     if (!currentSet) {
       return;
     }
 
-    completeCurrentSet("expected", currentSet.targetReps, currentSet.targetWeight);
+    await completeCurrentSet(
+      "expected",
+      currentSet.targetUnit === "s" ? 1 : currentSet.targetReps,
+      currentSet.targetWeight
+    );
   }
 
-  function saveDeviation() {
+  async function saveDeviation() {
     if (!currentSet) {
       return;
     }
 
-    const reps = Number.parseInt(deviationReps, 10);
-    if (!Number.isFinite(reps) || reps <= 0) {
+    let reps = currentSet.targetUnit === "s" ? 1 : Number.parseInt(deviationReps, 10);
+    if (currentSet.targetUnit !== "s" && (!Number.isFinite(reps) || reps <= 0)) {
       deviationError = "Please enter a valid reps value greater than 0.";
       return;
     }
@@ -292,7 +379,7 @@
       weight = parsedWeight;
     }
 
-    completeCurrentSet("deviation", reps, weight);
+    await completeCurrentSet("deviation", reps, weight);
   }
 
   function skipCurrentSetForNow() {
@@ -378,7 +465,16 @@
     <Typography variant="body" size="md" color="tertiary" as="p">
       Track your reps and weight in real time
     </Typography>
+    <a href="/history" class="history-link mt-2 inline-block">View full workout history and analytics</a>
   </div>
+
+  {#if persistenceError}
+    <Card>
+      <Typography variant="body" size="md" color="tertiary" as="p">
+        {persistenceError}
+      </Typography>
+    </Card>
+  {/if}
 
   {#if !sessionStarted}
     <div class="space-y-4 sm:space-y-6">
@@ -487,7 +583,13 @@
         <Button
           variant="secondary"
           size="md"
-          onclick={startSession}
+          onclick={async () => {
+            try {
+              await startSession();
+            } catch {
+              persistenceError = "Could not start workout session storage. Please try again.";
+            }
+          }}
           disabled={!selectedWorkout || selectedWorkout.exercises.length === 0}
         >
           Start Workout Now
@@ -508,7 +610,13 @@
             Order: {executionStyle === "staggered" ? "Staggered" : "By Exercise"}
           </Typography>
         </div>
-        <Button variant="tertiary" size="md" onclick={endSession}>
+        <Button
+          variant="tertiary"
+          size="md"
+          onclick={async () => {
+            await endSession();
+          }}
+        >
           End Session
         </Button>
       </div>
@@ -537,10 +645,17 @@
             </Typography>
 
             <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div class="expected-chip">
-                <span class="chip-label">Expected reps</span>
-                <strong>{currentSet.targetReps}</strong>
-              </div>
+              {#if currentSet.targetUnit !== "s"}
+                <div class="expected-chip">
+                  <span class="chip-label">Expected reps</span>
+                  <strong>{currentSet.targetReps}</strong>
+                </div>
+              {:else}
+                <div class="expected-chip">
+                  <span class="chip-label">Set mode</span>
+                  <strong>Timed</strong>
+                </div>
+              {/if}
               <div class="expected-chip">
                 <span class="chip-label">Expected amount</span>
                 <strong>
@@ -575,11 +690,23 @@
           </div>
 
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button variant="secondary" size="md" onclick={confirmExpectedSet}>
+            <Button
+              variant="secondary"
+              size="md"
+              onclick={async () => {
+                await confirmExpectedSet();
+              }}
+            >
               Confirm Expected
             </Button>
             {#if isTimeBasedSet}
-              <Button variant="secondary" size="md" onclick={completeAtStopwatchTime}>
+              <Button
+                variant="secondary"
+                size="md"
+                onclick={async () => {
+                  await completeAtStopwatchTime();
+                }}
+              >
                 Complete At Stopwatch Time
               </Button>
             {/if}
@@ -609,23 +736,25 @@
 
           {#if showDeviationForm}
             <div class="deviation-form border rounded-lg p-4 sm:p-5 space-y-4">
-              <div>
-                <label for="deviation-reps">
-                  <Typography variant="body" size="sm" as="span" color="secondary">
-                    Actual reps
-                  </Typography>
-                </label>
-                <div class="mt-2">
-                  <Input
-                    id="deviation-reps"
-                    name="deviation-reps"
-                    type="number"
-                    min={1}
-                    step={1}
-                    bind:value={deviationReps}
-                  />
+              {#if currentSet.targetUnit !== "s"}
+                <div>
+                  <label for="deviation-reps">
+                    <Typography variant="body" size="sm" as="span" color="secondary">
+                      Actual reps
+                    </Typography>
+                  </label>
+                  <div class="mt-2">
+                    <Input
+                      id="deviation-reps"
+                      name="deviation-reps"
+                      type="number"
+                      min={1}
+                      step={1}
+                      bind:value={deviationReps}
+                    />
+                  </div>
                 </div>
-              </div>
+              {/if}
 
               <div>
                 <label for="deviation-weight">
@@ -658,7 +787,13 @@
                 </Typography>
               {/if}
 
-              <Button variant="secondary" size="md" onclick={saveDeviation}>
+              <Button
+                variant="secondary"
+                size="md"
+                onclick={async () => {
+                  await saveDeviation();
+                }}
+              >
                 Save Deviation
               </Button>
             </div>
@@ -678,9 +813,13 @@
                   {setItem.exerciseName} • Set {setItem.setNumber}/{setItem.totalSets}
                 </Typography>
                 <Typography variant="body" size="sm" as="p" color="tertiary">
-                  {setItem.actualReps} reps
-                  {#if setItem.actualWeight != null}
-                    • {setItem.actualWeight} {setItem.targetUnit}
+                  {#if setItem.targetUnit === "s"}
+                    {setItem.actualWeight ?? "—"} s
+                  {:else}
+                    {setItem.actualReps} reps
+                    {#if setItem.actualWeight != null}
+                      • {setItem.actualWeight} {setItem.targetUnit}
+                    {/if}
                   {/if}
                   • {setItem.status === "expected" ? "as expected" : "deviation"}
                 </Typography>
@@ -747,5 +886,16 @@
 
   a {
     text-decoration: none;
+  }
+
+  .history-link {
+    color: var(--secondary);
+    text-decoration: none;
+  }
+
+  .history-link:hover,
+  .history-link:focus-visible {
+    color: var(--primary);
+    text-decoration: underline;
   }
 </style>

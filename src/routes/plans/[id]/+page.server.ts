@@ -71,11 +71,12 @@ export const actions: Actions = {
     const data = await request.formData();
     const exerciseId = parseInt(data.get('exerciseId') as string);
     const sets = parseInt(data.get('sets') as string);
-    const reps = parseInt(data.get('reps') as string);
     const targetUnit = (data.get('targetUnit') as string) === 's' ? 's' : 'kg';
     const targetValue = parseFloat(data.get('targetValue') as string);
+    const rawReps = parseInt(data.get('reps') as string);
+    const reps = targetUnit === 's' ? 1 : rawReps;
 
-    if (!exerciseId || !sets || !reps || Number.isNaN(targetValue)) {
+    if (!exerciseId || !sets || Number.isNaN(targetValue)) {
       return fail(400, { message: 'Missing required fields' });
     }
 
@@ -83,7 +84,7 @@ export const actions: Actions = {
       return fail(400, { message: 'Sets must be between 1 and 100' });
     }
 
-    if (reps < 1 || reps > 1000) {
+    if (targetUnit === 'kg' && (Number.isNaN(reps) || reps < 1 || reps > 1000)) {
       return fail(400, { message: 'Reps must be between 1 and 1000' });
     }
 

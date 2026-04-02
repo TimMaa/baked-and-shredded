@@ -13,7 +13,7 @@
     </Typography>
   </section>
 
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
     <a href="/exercises" class="no-underline">
       <Card hoverable>
         <div class="space-y-4">
@@ -51,6 +51,20 @@
           </Typography>
           <Typography variant="body" size="sm" color="default" as="p">
             Log your reps and weight during workout sessions
+          </Typography>
+        </div>
+      </Card>
+    </a>
+
+    <a href="/history" class="no-underline">
+      <Card hoverable>
+        <div class="space-y-4">
+          <div class="text-5xl">📈</div>
+          <Typography variant="headline" size="md" as="h2" color="primary">
+            History & Analytics
+          </Typography>
+          <Typography variant="body" size="sm" color="default" as="p">
+            Review completion trends, adherence, and deviation hotspots
           </Typography>
         </div>
       </Card>

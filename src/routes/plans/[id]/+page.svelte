@@ -333,23 +333,37 @@
                 </div>
               </div>
 
-              <div>
-                <label for="reps">
-                  <Typography variant="body" size="md" as="span" color="secondary">
-                    Reps per Set
-                  </Typography>
-                </label>
-                <div class="mt-2 sm:mt-3">
-                  <Input
-                    type="number"
-                    id="reps"
-                    name="reps"
-                    required
-                    bind:value={selectedReps}
-                    placeholder="10"
-                  />
+              {#if selectedTargetUnit === 'kg'}
+                <div>
+                  <label for="reps">
+                    <Typography variant="body" size="md" as="span" color="secondary">
+                      Reps per Set
+                    </Typography>
+                  </label>
+                  <div class="mt-2 sm:mt-3">
+                    <Input
+                      type="number"
+                      id="reps"
+                      name="reps"
+                      required
+                      bind:value={selectedReps}
+                      placeholder="10"
+                    />
+                  </div>
                 </div>
-              </div>
+              {:else}
+                <div>
+                  <Typography variant="body" size="md" as="span" color="secondary">
+                    Set Type
+                  </Typography>
+                  <div class="mt-2 sm:mt-3">
+                    <Typography variant="body" size="sm" color="tertiary" as="p">
+                      Time-based sets are duration only (no reps).
+                    </Typography>
+                  </div>
+                  <input type="hidden" name="reps" value="1" />
+                </div>
+              {/if}
 
               <div>
                 <label for="target-unit">
@@ -373,7 +387,7 @@
               <div>
                 <label for="target-value">
                   <Typography variant="body" size="md" as="span" color="secondary">
-                    {selectedTargetUnit === 'kg' ? 'Weight per Rep (kg)' : 'Time per Rep (s)'}
+                    {selectedTargetUnit === 'kg' ? 'Weight per Rep (kg)' : 'Time per Set (s)'}
                   </Typography>
                 </label>
                 <div class="mt-2 sm:mt-3">
@@ -396,7 +410,7 @@
                 type="submit"
                 variant="secondary"
                 size="md"
-                disabled={isSubmitting || !selectedExerciseId || !selectedSets || !selectedReps || !selectedTargetValue}
+                disabled={isSubmitting || !selectedExerciseId || !selectedSets || (selectedTargetUnit === 'kg' && !selectedReps) || !selectedTargetValue}
               >
                 {isSubmitting ? "Adding..." : "Add Exercise"}
               </Button>
@@ -501,15 +515,15 @@
                   </div>
                   <div class="bg-surface-container-low p-3 rounded-lg">
                     <Typography variant="body" size="sm" color="tertiary" as="p">
-                      REPS
+                      {exercise.target_unit === 's' ? 'MODE' : 'REPS'}
                     </Typography>
                     <Typography variant="headline" size="md" color="primary" as="p">
-                      {exercise.target_reps}
+                      {exercise.target_unit === 's' ? 'Timed' : exercise.target_reps}
                     </Typography>
                   </div>
                   <div class="bg-surface-container-low p-3 rounded-lg">
                     <Typography variant="body" size="sm" color="tertiary" as="p">
-                      {exercise.target_unit === 's' ? 'TIME / REP' : 'WEIGHT / REP'}
+                      {exercise.target_unit === 's' ? 'TIME / SET' : 'WEIGHT / REP'}
                     </Typography>
                     <Typography variant="headline" size="md" color="primary" as="p">
                       {exercise.target_weight ?? '—'}{exercise.target_weight == null ? '' : exercise.target_unit}

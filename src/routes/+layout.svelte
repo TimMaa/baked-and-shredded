@@ -32,6 +32,10 @@
           href="/execute"
           class="text-tertiary hover:text-primary transition-colors">Execute</a
         >
+        <a
+          href="/history"
+          class="text-tertiary hover:text-primary transition-colors">History</a
+        >
       </div>
     </div>
   </nav>

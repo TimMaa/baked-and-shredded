@@ -1,0 +1,372 @@
+<script lang="ts">
+  import Card from "$lib/components/Card.svelte";
+  import Typography from "$lib/components/Typography.svelte";
+  import type { PageData } from "./$types";
+
+  let { data }: { data: PageData } = $props();
+
+  type SessionHistoryRow = PageData["sessionHistory"][number];
+  type WorkoutAnalyticsRow = PageData["workoutAnalytics"][number];
+  type ExerciseAnalyticsRow = PageData["exerciseAnalytics"][number];
+  type RangeOption = "all" | "7" | "30" | "90";
+
+  const sessionHistory = $derived((data.sessionHistory as SessionHistoryRow[]) ?? []);
+  const workoutAnalytics = $derived((data.workoutAnalytics as WorkoutAnalyticsRow[]) ?? []);
+  const exerciseAnalytics = $derived((data.exerciseAnalytics as ExerciseAnalyticsRow[]) ?? []);
+  const selectedRange = $derived(((data.selectedRange as RangeOption | undefined) ?? "all") as RangeOption);
+
+  const overallStats = $derived.by(() => {
+    const totalSessions = sessionHistory.length;
+    const totalSets = sessionHistory.reduce((sum, row) => sum + Number(row.sets_completed || 0), 0);
+    const avgCompletion =
+      totalSessions > 0
+        ? Math.round((sessionHistory.reduce((sum, row) => sum + Number(row.completion_rate_pct || 0), 0) / totalSessions) * 10) / 10
+        : 0;
+    const avgAdherence =
+      totalSessions > 0
+        ? Math.round((sessionHistory.reduce((sum, row) => sum + Number(row.adherence_rate_pct || 0), 0) / totalSessions) * 10) / 10
+        : 0;
+
+    return {
+      totalSessions,
+      totalSets,
+      avgCompletion,
+      avgAdherence,
+    };
+  });
+
+  function formatDate(dateLike: string | null) {
+    if (!dateLike) return "-";
+    const parsed = new Date(dateLike);
+    if (Number.isNaN(parsed.getTime())) return "-";
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(parsed);
+  }
+
+  function formatDuration(totalSeconds: number) {
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return "-";
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+  }
+
+  function adherenceBand(valueLike: number | string | null | undefined): "good" | "warning" | "critical" {
+    const value = Number(valueLike ?? 0);
+    if (!Number.isFinite(value)) {
+      return "critical";
+    }
+
+    if (value < 75) {
+      return "critical";
+    }
+
+    if (value < 90) {
+      return "warning";
+    }
+
+    return "good";
+  }
+
+  function adherenceLabel(valueLike: number | string | null | undefined) {
+    const band = adherenceBand(valueLike);
+    if (band === "good") return "Good";
+    if (band === "warning") return "Watch";
+    return "Critical";
+  }
+</script>
+
+<div class="space-y-6 sm:space-y-8">
+  <div>
+    <Typography variant="display" size="sm" as="h1" color="primary">
+      Workout History
+    </Typography>
+    <Typography variant="body" size="md" color="tertiary" as="p">
+      Track outcomes across sessions and spot where execution drifts from plan.
+    </Typography>
+
+    <div class="mt-4" role="group" aria-label="History date range">
+      <div class="range-group" role="radiogroup" aria-label="Date range filter">
+        <a
+          href="/history?range=all"
+          role="radio"
+          aria-checked={selectedRange === "all"}
+          class="range-option"
+          class:active={selectedRange === "all"}
+        >
+          All time
+        </a>
+        <a
+          href="/history?range=7"
+          role="radio"
+          aria-checked={selectedRange === "7"}
+          class="range-option"
+          class:active={selectedRange === "7"}
+        >
+          Last 7 days
+        </a>
+        <a
+          href="/history?range=30"
+          role="radio"
+          aria-checked={selectedRange === "30"}
+          class="range-option"
+          class:active={selectedRange === "30"}
+        >
+          Last 30 days
+        </a>
+        <a
+          href="/history?range=90"
+          role="radio"
+          aria-checked={selectedRange === "90"}
+          class="range-option"
+          class:active={selectedRange === "90"}
+        >
+          Last 90 days
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <Card>
+      <Typography variant="body" size="sm" color="tertiary" as="p">Sessions Logged</Typography>
+      <Typography variant="headline" size="lg" as="p" color="primary">{overallStats.totalSessions}</Typography>
+    </Card>
+    <Card>
+      <Typography variant="body" size="sm" color="tertiary" as="p">Sets Completed</Typography>
+      <Typography variant="headline" size="lg" as="p" color="secondary">{overallStats.totalSets}</Typography>
+    </Card>
+    <Card>
+      <Typography variant="body" size="sm" color="tertiary" as="p">Avg Completion</Typography>
+      <Typography variant="headline" size="lg" as="p" color="primary">{overallStats.avgCompletion}%</Typography>
+    </Card>
+    <Card>
+      <Typography variant="body" size="sm" color="tertiary" as="p">Avg Adherence</Typography>
+      <div class={`adherence-value adherence-${adherenceBand(overallStats.avgAdherence)}`}>
+        <Typography variant="headline" size="lg" as="p">{overallStats.avgAdherence}%</Typography>
+      </div>
+    </Card>
+  </div>
+
+  <Card>
+    <Typography variant="headline" size="sm" as="h2" color="primary">
+      Session Timeline
+    </Typography>
+    {#if sessionHistory.length === 0}
+      <div class="mt-3">
+        <Typography variant="body" size="sm" color="tertiary" as="p">
+          No sessions logged yet.
+        </Typography>
+      </div>
+    {:else}
+      <div class="overflow-x-auto mt-3">
+        <table class="w-full text-sm analytics-table">
+          <thead>
+            <tr>
+              <th scope="col">When</th>
+              <th scope="col">Workout</th>
+              <th scope="col">Completion</th>
+              <th scope="col">Adherence</th>
+              <th scope="col">Expected</th>
+              <th scope="col">Deviation</th>
+              <th scope="col">Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each sessionHistory as row (row.session_id)}
+              <tr>
+                <td>{formatDate(row.completed_at ?? row.started_at)}</td>
+                <th scope="row" class="font-medium">{row.workout_name}</th>
+                <td>{row.sets_completed}/{row.total_sets_planned} ({row.completion_rate_pct}%)</td>
+                <td>
+                  <span class={`adherence-chip adherence-${adherenceBand(row.adherence_rate_pct)}`}>
+                    {row.adherence_rate_pct}% ({adherenceLabel(row.adherence_rate_pct)})
+                  </span>
+                </td>
+                <td>{row.expected_sets}</td>
+                <td>{row.deviation_sets}</td>
+                <td>{formatDuration(Number(row.duration_seconds))}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+  </Card>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <Card>
+      <Typography variant="headline" size="sm" as="h2" color="primary">
+        Workout Performance Breakdown
+      </Typography>
+      {#if workoutAnalytics.length === 0}
+        <div class="mt-3">
+          <Typography variant="body" size="sm" color="tertiary" as="p">
+            Analytics will appear after your first completed workout.
+          </Typography>
+        </div>
+      {:else}
+        <div class="overflow-x-auto mt-3">
+          <table class="w-full text-sm analytics-table">
+            <thead>
+              <tr>
+                <th scope="col">Workout</th>
+                <th scope="col">Sessions</th>
+                <th scope="col">Avg Completion</th>
+                <th scope="col">Avg Adherence</th>
+                <th scope="col">Best Adherence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each workoutAnalytics as row (row.workout_id)}
+                <tr>
+                  <th scope="row" class="font-medium">{row.workout_name}</th>
+                  <td>{row.sessions_count}</td>
+                  <td>{row.avg_completion_rate_pct}%</td>
+                  <td>
+                    <span class={`adherence-chip adherence-${adherenceBand(row.avg_adherence_rate_pct)}`}>
+                      {row.avg_adherence_rate_pct}% ({adherenceLabel(row.avg_adherence_rate_pct)})
+                    </span>
+                  </td>
+                  <td>
+                    <span class={`adherence-chip adherence-${adherenceBand(row.best_adherence_rate_pct)}`}>
+                      {row.best_adherence_rate_pct}% ({adherenceLabel(row.best_adherence_rate_pct)})
+                    </span>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </Card>
+
+    <Card>
+      <Typography variant="headline" size="sm" as="h2" color="primary">
+        Exercise Deviation Hotspots
+      </Typography>
+      {#if exerciseAnalytics.length === 0}
+        <div class="mt-3">
+          <Typography variant="body" size="sm" color="tertiary" as="p">
+            Deviation hotspots will appear after sets are logged.
+          </Typography>
+        </div>
+      {:else}
+        <div class="overflow-x-auto mt-3">
+          <table class="w-full text-sm analytics-table">
+            <thead>
+              <tr>
+                <th scope="col">Exercise</th>
+                <th scope="col">Deviation Rate</th>
+                <th scope="col">Deviation Sets</th>
+                <th scope="col">Avg Weight Delta</th>
+                <th scope="col">Avg Time Delta</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each exerciseAnalytics as row (row.exercise_id)}
+                <tr>
+                  <th scope="row" class="font-medium">{row.exercise_name}</th>
+                  <td>{row.deviation_rate_pct}%</td>
+                  <td>{row.deviation_sets}/{row.total_sets_logged}</td>
+                  <td>{row.avg_weight_delta == null ? '-' : `${row.avg_weight_delta} kg`}</td>
+                  <td>{row.avg_time_delta_seconds == null ? '-' : `${row.avg_time_delta_seconds}s`}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </Card>
+  </div>
+</div>
+
+<style>
+  .analytics-table th,
+  .analytics-table td {
+    text-align: left;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--outline-variant);
+    vertical-align: top;
+  }
+
+  .range-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .range-option {
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--radius-full);
+    padding: 0.35rem 0.75rem;
+    color: var(--tertiary);
+    text-decoration: none;
+    background: var(--surface-container-low);
+  }
+
+  .range-option:hover,
+  .range-option:focus-visible {
+    border-color: var(--secondary);
+    color: var(--primary);
+    text-decoration: underline;
+  }
+
+  .range-option.active {
+    border-color: var(--secondary);
+    color: var(--on-secondary);
+    background: var(--secondary-container);
+  }
+
+  .adherence-chip {
+    display: inline-block;
+    border-radius: var(--radius-full);
+    padding: 0.2rem 0.6rem;
+    border: 1px solid transparent;
+    font-weight: 700;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .adherence-value {
+    margin-top: 0.125rem;
+    background: transparent;
+    border: none;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  .adherence-value.adherence-good {
+    color: var(--secondary);
+  }
+
+  .adherence-value.adherence-warning {
+    color: var(--tertiary);
+  }
+
+  .adherence-value.adherence-critical {
+    color: var(--error);
+  }
+
+  .adherence-chip.adherence-good {
+    color: var(--on-secondary);
+    border-color: var(--secondary);
+    background: var(--secondary-container);
+  }
+
+  .adherence-chip.adherence-warning {
+    color: var(--on-tertiary);
+    border-color: var(--tertiary);
+    background: var(--tertiary-container);
+  }
+
+  .adherence-chip.adherence-critical {
+    color: var(--error);
+    border-color: var(--error);
+    background: var(--error-container);
+  }
+</style>
