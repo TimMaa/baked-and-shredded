@@ -6,6 +6,7 @@
   import Input from "$lib/components/Input.svelte";
   import MuscleGroupSelector from "$lib/components/MuscleGroupSelector.svelte";
   import MuscleGroupCoverage from "$lib/components/MuscleGroupCoverage.svelte";
+  import { createDefaultMuscleRatings, totalMusclePoints, type MuscleRatings } from "$lib/muscleGroups";
   import type { PageData, ActionData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -13,7 +14,8 @@
   let showForm = $state(false);
   let formName = $state("");
   let formDescription = $state("");
-  let formFocusAreas = $state<string[]>([]);
+  let formTip = $state("");
+  let formMuscleRatings = $state<MuscleRatings>(createDefaultMuscleRatings());
   let isSubmitting = $state(false);
   let editingId = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
@@ -25,11 +27,18 @@
     successMessage = null;
   };
 
-  const handleEditClick = (id: number, name: string, description: string, focusAreas: string[]) => {
+  const handleEditClick = (
+    id: number,
+    name: string,
+    description: string,
+    tip: string,
+    focusAreas: MuscleRatings
+  ) => {
     editingId = id;
     formName = name;
     formDescription = description;
-    formFocusAreas = focusAreas || [];
+    formTip = tip || "";
+    formMuscleRatings = focusAreas || createDefaultMuscleRatings();
     errorMessage = null;
   };
 
@@ -42,7 +51,8 @@
     editingId = null;
     formName = "";
     formDescription = "";
-    formFocusAreas = [];
+    formTip = "";
+    formMuscleRatings = createDefaultMuscleRatings();
     errorMessage = null;
   };
 
@@ -57,7 +67,8 @@
       successMessage = "Operation completed successfully";
       formName = "";
       formDescription = "";
-      formFocusAreas = [];
+      formTip = "";
+      formMuscleRatings = createDefaultMuscleRatings();
       showForm = false;
       editingId = null;
       isSubmitting = false;
@@ -159,15 +170,38 @@
           </div>
 
           <div>
-            <label for="focus-areas">
+            <label for="tip">
               <Typography variant="body" size="md" as="span" color="secondary">
-                Focus Areas (Muscle Groups)
+                Tip
               </Typography>
             </label>
             <div class="mt-2 sm:mt-3">
-              <MuscleGroupSelector bind:selected={formFocusAreas} required />
+              <Input
+                type="textarea"
+                id="tip"
+                name="tip"
+                rows={2}
+                bind:value={formTip}
+                placeholder="Optional technique tip..."
+              />
             </div>
-            <input type="hidden" name="focusAreas" value={JSON.stringify(formFocusAreas)} />
+          </div>
+
+          <div>
+            <label for="focus-areas">
+              <Typography variant="body" size="md" as="span" color="secondary">
+                Muscle Group Effectiveness (0-5)
+              </Typography>
+            </label>
+            <div class="mt-2 sm:mt-3">
+              <MuscleGroupSelector bind:selected={formMuscleRatings} required maxPoints={25} />
+            </div>
+            <input type="hidden" name="muscleRatings" value={JSON.stringify(formMuscleRatings)} />
+            <div class="mt-2">
+              <Typography variant="body" size="sm" color="tertiary" as="p">
+                Total points: {totalMusclePoints(formMuscleRatings)}/25
+              </Typography>
+            </div>
           </div>
 
           <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 pt-2 sm:pt-4">
@@ -187,6 +221,8 @@
                 showForm = false;
                 formName = "";
                 formDescription = "";
+                formTip = "";
+                formMuscleRatings = createDefaultMuscleRatings();
                 errorMessage = null;
               }}
             >
@@ -267,15 +303,38 @@
                   </div>
 
                   <div>
-                    <label for="edit-focus-areas">
+                    <label for="edit-tip">
                       <Typography variant="body" size="md" as="span" color="secondary">
-                        Focus Areas (Muscle Groups)
+                        Tip
                       </Typography>
                     </label>
                     <div class="mt-2 sm:mt-3">
-                      <MuscleGroupSelector bind:selected={formFocusAreas} required />
+                      <Input
+                        type="textarea"
+                        id="edit-tip"
+                        name="tip"
+                        rows={2}
+                        bind:value={formTip}
+                        placeholder="Optional technique tip..."
+                      />
                     </div>
-                    <input type="hidden" name="focusAreas" value={JSON.stringify(formFocusAreas)} />
+                  </div>
+
+                  <div>
+                    <label for="edit-focus-areas">
+                      <Typography variant="body" size="md" as="span" color="secondary">
+                        Muscle Group Effectiveness (0-5)
+                      </Typography>
+                    </label>
+                    <div class="mt-2 sm:mt-3">
+                      <MuscleGroupSelector bind:selected={formMuscleRatings} required maxPoints={25} />
+                    </div>
+                    <input type="hidden" name="muscleRatings" value={JSON.stringify(formMuscleRatings)} />
+                    <div class="mt-2">
+                      <Typography variant="body" size="sm" color="tertiary" as="p">
+                        Total points: {totalMusclePoints(formMuscleRatings)}/25
+                      </Typography>
+                    </div>
                   </div>
 
                   <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 pt-2 sm:pt-4">
@@ -321,9 +380,14 @@
                       {workout.description}
                     </Typography>
                   {/if}
-                  {#if workout.focus_areas && workout.focus_areas.length > 0}
+                  {#if workout.tip}
+                    <Typography variant="body" size="sm" color="secondary" as="p">
+                      Tip: {workout.tip}
+                    </Typography>
+                  {/if}
+                  {#if workout.focus_areas}
                     <div class="mt-3 pt-3 border-t border-gray-200">
-                      <MuscleGroupCoverage focusAreas={workout.focus_areas} compact />
+                      <MuscleGroupCoverage muscleRatings={workout.focus_areas} compact />
                     </div>
                   {/if}
                 </div>
@@ -331,7 +395,7 @@
                   <Button
                     variant="secondary"
                     size="sm"
-                    onclick={() => handleEditClick(workout.id, workout.name, workout.description, workout.focus_areas)}
+                    onclick={() => handleEditClick(workout.id, workout.name, workout.description, workout.tip, workout.focus_areas)}
                   >
                     Edit
                   </Button>

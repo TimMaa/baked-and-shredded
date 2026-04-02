@@ -1,30 +1,26 @@
-import { getAllTrainingPlans, createTrainingPlan, deleteTrainingPlan, getTrainingPlan, getTrainingPlanWithWorkouts, getWorkout } from '$lib/db';
+import { getAllTrainingPlans, createTrainingPlan, deleteTrainingPlan, getTrainingPlan, getTrainingPlanWithExercises } from '$lib/db';
 import { fail } from '@sveltejs/kit';
+import { createDefaultMuscleRatings, normalizeMuscleRatings } from '$lib/muscleGroups';
 
 export const load = async () => {
   const plans = await getAllTrainingPlans();
 
-  // Enrich each plan with muscle group coverage
+  // Enrich each plan with muscle group coverage from its exercises
   const enrichedPlans = await Promise.all(
     plans.map(async (plan: any) => {
-      const planWithWorkouts = await getTrainingPlanWithWorkouts(plan.id);
+      const planWithExercises = await getTrainingPlanWithExercises(plan.id);
 
-      // Collect all focus areas from workouts in this plan
-      const allFocusAreas: string[] = [];
+      // Aggregate muscle ratings across exercises using max rating per muscle.
+      const focusAreaRatings = createDefaultMuscleRatings();
 
-      if (planWithWorkouts?.days && Array.isArray(planWithWorkouts.days)) {
-        for (const day of planWithWorkouts.days) {
-          if (day.workouts) {
-            try {
-              const workoutsArray = JSON.parse(`[${day.workouts}]`);
-              for (const workout of workoutsArray) {
-                const fullWorkout = await getWorkout(workout.workoutId);
-                if (fullWorkout && fullWorkout.focus_areas && Array.isArray(fullWorkout.focus_areas)) {
-                  allFocusAreas.push(...fullWorkout.focus_areas);
-                }
+      if (planWithExercises?.exercises && Array.isArray(planWithExercises.exercises)) {
+        for (const exercise of planWithExercises.exercises) {
+          if (exercise.focus_areas && typeof exercise.focus_areas === 'object') {
+            const normalized = normalizeMuscleRatings(exercise.focus_areas);
+            for (const [group, rating] of Object.entries(normalized)) {
+              if (rating > focusAreaRatings[group]) {
+                focusAreaRatings[group] = rating;
               }
-            } catch (e) {
-              // Skip parsing errors
             }
           }
         }
@@ -32,7 +28,8 @@ export const load = async () => {
 
       return {
         ...plan,
-        focusAreas: allFocusAreas
+        exerciseCount: planWithExercises?.exercises?.length || 0,
+        focusAreaRatings,
       };
     })
   );

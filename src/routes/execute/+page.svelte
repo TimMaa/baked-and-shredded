@@ -71,7 +71,7 @@
                     name="plan"
                     value={plan.id}
                     bind:group={selectedPlan}
-                    class="w-5 h-5 mt-0.5 flex-shrink-0"
+                    class="w-5 h-5 mt-0.5 shrink-0"
                   />
                   <div class="ml-3 sm:ml-4 min-w-0">
                     <Typography

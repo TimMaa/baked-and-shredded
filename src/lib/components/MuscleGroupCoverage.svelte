@@ -1,12 +1,14 @@
 <script lang="ts">
   import Typography from "./Typography.svelte";
+  import { createDefaultMuscleRatings, normalizeMuscleRatings, type MuscleRatings } from "$lib/muscleGroups";
 
   interface Props {
-    focusAreas: string[];
+    focusAreas?: string[];
+    muscleRatings?: MuscleRatings;
     compact?: boolean;
   }
 
-  let { focusAreas = [], compact = false }: Props = $props();
+  let { focusAreas = [], muscleRatings, compact = false }: Props = $props();
 
   const muscleGroups = {
     "Upper Body": [
@@ -27,36 +29,66 @@
     ],
   };
 
-  const uniqueFocusAreas = $derived(Array.from(new Set(focusAreas)));
+  const normalizedRatings = $derived.by(() => {
+    if (muscleRatings) {
+      return normalizeMuscleRatings(muscleRatings);
+    }
 
-  // Calculate coverage percentage for each category
+    const base = createDefaultMuscleRatings();
+    for (const group of focusAreas) {
+      if (group in base) {
+        base[group] = 1;
+      }
+    }
+    return base;
+  });
+
+  const ratedMuscles = $derived.by(() =>
+    Object.entries(normalizedRatings)
+      .filter(([, rating]) => rating > 0)
+      .sort((a, b) => b[1] - a[1])
+  );
+
+  const totalPoints = $derived.by(() =>
+    Object.values(normalizedRatings).reduce((sum, rating) => sum + rating, 0)
+  );
+
+  // Calculate weighted category effectiveness based on rating points.
   const categoryStats = $derived.by(() => {
-    const stats: Record<string, { covered: number; total: number; percentage: number }> = {};
+    const stats: Record<string, { points: number; maxPoints: number; percentage: number }> = {};
 
     for (const [category, groups] of Object.entries(muscleGroups)) {
-      const covered = groups.filter(g => uniqueFocusAreas.includes(g)).length;
-      const total = groups.length;
-      const percentage = Math.round((covered / total) * 100);
-      stats[category] = { covered, total, percentage };
+      const points = groups.reduce((sum, group) => sum + (normalizedRatings[group] ?? 0), 0);
+      const maxPoints = groups.length * 5;
+      const percentage = Math.round((points / maxPoints) * 100);
+      stats[category] = { points, maxPoints, percentage };
     }
 
     return stats;
   });
 </script>
 
-{#if focusAreas && focusAreas.length > 0}
+{#if ratedMuscles.length > 0}
   <div class="space-y-3 sm:space-y-4">
     {#if compact}
-      <!-- Compact view: just the pills -->
+      <!-- Compact view: show top rated muscles -->
       <div class="flex flex-wrap gap-2">
-        {#each uniqueFocusAreas as area}
+        {#each ratedMuscles.slice(0, 5) as [area, rating]}
           <span class="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-900 rounded-full">
-            {area.split('(')[0].trim()}
+            {area.split('(')[0].trim()} ({rating})
           </span>
         {/each}
+        {#if ratedMuscles.length > 5}
+          <span class="inline-block px-2 py-1 text-xs font-medium bg-surface-container text-tertiary rounded-full">
+            +{ratedMuscles.length - 5} more
+          </span>
+        {/if}
       </div>
     {:else}
       <!-- Full view: heat map with coverage bars -->
+      <Typography variant="body" size="sm" color="tertiary" as="p">
+        Total effectiveness points: {totalPoints}
+      </Typography>
       <div class="space-y-3">
         {#each Object.entries(categoryStats) as [category, stats]}
           <div class="space-y-1.5">
@@ -68,7 +100,7 @@
               </div>
               <div>
                 <Typography variant="body" size="sm" color="tertiary" as="span">
-                  {stats.covered}/{stats.total}
+                  {stats.points}/{stats.maxPoints}
                 </Typography>
               </div>
             </div>
@@ -90,9 +122,9 @@
           </Typography>
         </div>
         <div class="flex flex-wrap gap-2">
-          {#each uniqueFocusAreas as area}
+          {#each ratedMuscles as [area, rating]}
             <span class="inline-block px-2.5 py-1 text-xs font-medium bg-blue-100 text-blue-900 rounded-full">
-              {area}
+              {area} ({rating})
             </span>
           {/each}
         </div>

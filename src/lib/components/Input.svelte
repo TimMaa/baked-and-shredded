@@ -8,6 +8,9 @@
     rows?: number;
     name?: string;
     id?: string;
+    min?: string | number;
+    max?: string | number;
+    step?: string | number;
     onchange?: (value: string | number) => void;
     oninput?: (value: string | number) => void;
   }
@@ -21,6 +24,9 @@
     rows = 3,
     name = '',
     id = '',
+    min,
+    max,
+    step,
     onchange,
     oninput,
     ...rest
@@ -61,6 +67,9 @@
     {required}
     {name}
     {id}
+    {min}
+    {max}
+    {step}
     onchange={handleChange}
     oninput={handleInput}
     {...rest}

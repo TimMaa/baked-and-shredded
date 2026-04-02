@@ -6,7 +6,6 @@
   import Input from "$lib/components/Input.svelte";
   import MuscleGroupCoverage from "$lib/components/MuscleGroupCoverage.svelte";
   import WorkoutSelector from "$lib/components/WorkoutSelector.svelte";
-  import WeekCalendarView from "$lib/components/WeekCalendarView.svelte";
   import type { PageData, ActionData } from "./$types";
 
   let { data, form }: { data: PageData; form?: ActionData } = $props();
@@ -18,22 +17,11 @@
   let errorMessage = $state<string | null>(null);
   let successMessage = $state<string | null>(null);
 
-  let expandedDay = $state<number | null>(null);
+  let showAddForm = $state(false);
   let selectedWorkoutId = $state<number | null>(null);
-  let targetReps = $state("");
-  let targetWeight = $state("");
-
-  const daysOfWeek = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-  ];
-
-  const addedDays = $derived(data.plan.days ? data.plan.days.map((d: any) => d.day_of_week) : []);
+  let selectedSets = $state("3");
+  let selectedReps = $state("10");
+  let selectedWeight = $state("");
 
   $effect(() => {
     editName = data.plan.name;
@@ -46,8 +34,9 @@
     successMessage = null;
   };
 
-  const handleRemoveWorkout = (workoutName: string) => {
-    return confirm(`Remove "${workoutName}" from this day?`);
+  const handleAddExercise = async (e: Event) => {
+    isSubmitting = true;
+    errorMessage = null;
   };
 
   $effect(() => {
@@ -55,10 +44,11 @@
       successMessage = "Updated successfully";
       isEditingPlan = false;
       isSubmitting = false;
+      showAddForm = false;
       selectedWorkoutId = null;
-      targetReps = "";
-      targetWeight = "";
-      expandedDay = null;
+      selectedSets = "3";
+      selectedReps = "10";
+      selectedWeight = "";
       setTimeout(() => {
         successMessage = null;
       }, 3000);
@@ -67,6 +57,15 @@
       isSubmitting = false;
     }
   });
+
+  const resetAddForm = () => {
+    showAddForm = false;
+    selectedWorkoutId = null;
+    selectedSets = "3";
+    selectedReps = "10";
+    selectedWeight = "";
+    errorMessage = null;
+  };
 </script>
 
 <div class="space-y-6 sm:space-y-8">
@@ -89,14 +88,14 @@
   <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
     <div>
       <a href="/plans" class="text-primary hover:text-secondary text-sm mb-2 inline-block">← Back to Plans</a>
-      <Typography variant="display" size="sm" as="h1" color="secondary">
+      <Typography variant="display" size="sm" as="h1" color="primary">
         {data.plan.name}
       </Typography>
       <Typography variant="body" size="md" color="tertiary" as="p">
-        Manage your weekly schedule
+        Configure your workout session
       </Typography>
     </div>
-    {#if !isEditingPlan}
+    {#if !isEditingPlan && !showAddForm}
       <Button
         variant="tertiary"
         size="md"
@@ -129,7 +128,7 @@
                 name="name"
                 required
                 bind:value={editName}
-                placeholder="e.g., Push Pull Legs"
+                placeholder="e.g., Monday Upper Body"
               />
             </div>
           </div>
@@ -147,7 +146,7 @@
                 name="description"
                 rows={3}
                 bind:value={editDescription}
-                placeholder="Add details about this training plan..."
+                placeholder="Add details about this training session..."
               />
             </div>
           </div>
@@ -180,169 +179,206 @@
     </Card>
   {/if}
 
-  {#if data.focusAreas && data.focusAreas.length > 0}
+  {#if data.focusAreaRatings}
     <Card>
       <div class="mb-4">
         <Typography variant="headline" size="sm" as="h2" color="primary">
           Muscle Group Coverage
         </Typography>
       </div>
-      <MuscleGroupCoverage focusAreas={data.focusAreas} />
+      <MuscleGroupCoverage muscleRatings={data.focusAreaRatings} />
     </Card>
   {/if}
 
   <div>
-    <Typography variant="headline" size="md" as="h2" color="primary">
-      Weekly Schedule
-    </Typography>
+    <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-4">
+      <Typography variant="headline" size="md" as="h2" color="primary">
+        Exercises
+      </Typography>
+      {#if !showAddForm && !isEditingPlan}
+        <Button variant="primary" size="md" onclick={() => (showAddForm = true)}>
+          + Add Exercise
+        </Button>
+      {/if}
+    </div>
 
-    {#if !data.plan.days || data.plan.days.length === 0}
+    {#if showAddForm}
       <Card>
-        <div class="mb-4">
-          <Typography variant="body" size="md" color="tertiary" as="p">
-            No days have been added yet. Add training days to get started.
-          </Typography>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          {#each daysOfWeek as day}
-            <form method="POST" action="?/addDay">
-              <input type="hidden" name="day" value={day} />
-              <Button type="submit" variant="secondary" size="sm">
-                + Add {day.substring(0, 3)}
-              </Button>
-            </form>
-          {/each}
-        </div>
-      </Card>
-    {:else}
-      <WeekCalendarView
-        days={data.plan.days.map((day: any) => ({
-          ...day,
-          workouts: day.workouts ? JSON.parse(`[${day.workouts}]`) : []
-        }))}
-        expandedDay={expandedDay}
-        onExpandDay={(dayId) => {
-          expandedDay = dayId;
-          selectedWorkoutId = null;
-          targetReps = "";
-          targetWeight = "";
-        }}
-        onAddClick={(dayId) => {
-          expandedDay = dayId;
-        }}
-        onRemoveClick={(workoutId, workoutName) => {
-          if (handleRemoveWorkout(workoutName)) {
-            // Find and submit the hidden remove form
-            const form = document.querySelector(`#remove-workout-${workoutId}`) as HTMLFormElement;
-            if (form) {
-              form.requestSubmit();
-            }
-          }
-        }}
-      />
-
-      <!-- Hidden forms for removing workouts -->
-      {#each data.plan.days as day}
-        {#if day.workouts}
-          {#each JSON.parse(`[${day.workouts}]`) as workout}
-            <form id="remove-workout-{workout.id}" method="POST" action="?/removeWorkoutFromDay" style="display: none;">
-              <input type="hidden" name="planWorkoutId" value={workout.id} />
-            </form>
-          {/each}
-        {/if}
-      {/each}
-
-      {#if expandedDay !== null && data.plan.days}
-        {#each data.plan.days as day}
-          {#if day.id === expandedDay}
-            <Card>
-              <div class="mt-4 pt-4 space-y-4">
+        <form
+          method="POST"
+          action="?/addExercise"
+          use:enhance
+          onsubmit={handleAddExercise}
+        >
+          <div class="space-y-4 sm:space-y-6">
+            <div>
+              <label for="workout-select">
                 <Typography variant="body" size="md" as="span" color="secondary">
-                  Add Workout to {day.day_of_week}:
+                  Select Exercise
                 </Typography>
+              </label>
+              <div class="mt-2 sm:mt-3">
                 <WorkoutSelector
                   workouts={data.workouts}
                   selected={selectedWorkoutId}
                   onSelect={(id) => (selectedWorkoutId = id)}
                 />
-
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label for="reps-{day.id}">
-                      <Typography variant="body" size="sm" color="secondary" as="span">
-                        Target Reps
-                      </Typography>
-                    </label>
-                    <Input
-                      type="number"
-                      id="reps-{day.id}"
-                      bind:value={targetReps}
-                      placeholder="e.g., 10"
-                    />
-                  </div>
-                  <div>
-                    <label for="weight-{day.id}">
-                      <Typography variant="body" size="sm" color="secondary" as="span">
-                        Target Weight (kg)
-                      </Typography>
-                    </label>
-                    <Input
-                      type="number"
-                      id="weight-{day.id}"
-                      bind:value={targetWeight}
-                      placeholder="e.g., 85"
-                    />
-                  </div>
-                </div>
-
-                <form method="POST" action="?/addWorkoutToDay">
-                  <input type="hidden" name="planDayId" value={day.id} />
-                  <input type="hidden" name="workoutId" value={selectedWorkoutId} />
-                  <input type="hidden" name="targetReps" value={targetReps} />
-                  <input type="hidden" name="targetWeight" value={targetWeight} />
-                  <Button
-                    type="submit"
-                    variant="secondary"
-                    size="md"
-                    disabled={!selectedWorkoutId || !targetReps}
-                    onclick={() => {
-                      if (selectedWorkoutId && targetReps) {
-                        selectedWorkoutId = null;
-                        targetReps = "";
-                        targetWeight = "";
-                      }
-                    }}
-                  >
-                    Add Workout
-                  </Button>
-                </form>
               </div>
-            </Card>
-          {/if}
-        {/each}
-      {/if}
+            </div>
 
-      {#if addedDays.length < 7}
-        <Card>
-          <div class="mt-4 mb-4">
-            <Typography variant="body" size="md" color="tertiary" as="p">
-              Add more training days:
-            </Typography>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label for="sets">
+                  <Typography variant="body" size="md" as="span" color="secondary">
+                    Sets
+                  </Typography>
+                </label>
+                <div class="mt-2 sm:mt-3">
+                  <Input
+                    type="number"
+                    id="sets"
+                    name="sets"
+                    required
+                    bind:value={selectedSets}
+                    placeholder="3"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label for="reps">
+                  <Typography variant="body" size="md" as="span" color="secondary">
+                    Reps per Set
+                  </Typography>
+                </label>
+                <div class="mt-2 sm:mt-3">
+                  <Input
+                    type="number"
+                    id="reps"
+                    name="reps"
+                    required
+                    bind:value={selectedReps}
+                    placeholder="10"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label for="weight">
+                  <Typography variant="body" size="md" as="span" color="secondary">
+                    Weight (kg)
+                  </Typography>
+                </label>
+                <div class="mt-2 sm:mt-3">
+                  <Input
+                    type="number"
+                    id="weight"
+                    name="weight"
+                    bind:value={selectedWeight}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <input type="hidden" name="workoutId" value={selectedWorkoutId} />
+
+            <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 pt-2 sm:pt-4">
+              <Button
+                type="submit"
+                variant="secondary"
+                size="md"
+                disabled={isSubmitting || !selectedWorkoutId || !selectedSets || !selectedReps}
+              >
+                {isSubmitting ? "Adding..." : "Add Exercise"}
+              </Button>
+              <Button
+                type="button"
+                variant="tertiary"
+                size="md"
+                onclick={resetAddForm}
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
-          <div class="flex flex-wrap gap-2">
-            {#each daysOfWeek as day}
-              {#if !addedDays.includes(day)}
-                <form method="POST" action="?/addDay" style="display: contents;">
-                  <input type="hidden" name="day" value={day} />
-                  <Button type="submit" variant="secondary" size="sm">
-                    + Add {day.substring(0, 3)}
-                  </Button>
-                </form>
-              {/if}
-            {/each}
-          </div>
-        </Card>
-      {/if}
+        </form>
+      </Card>
+    {/if}
+
+    {#if !data.plan.exercises || data.plan.exercises.length === 0}
+      <Card>
+        <Typography variant="body" size="md" color="tertiary" as="p">
+          No exercises added yet. Add your first exercise to set up this training session.
+        </Typography>
+      </Card>
+    {:else}
+      <div class="space-y-3 sm:space-y-4">
+        {#each data.plan.exercises as exercise, index (exercise.id)}
+          <Card>
+            <div class="space-y-3">
+              <div class="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start">
+                <div class="flex-1">
+                  <Typography variant="headline" size="sm" as="h3" color="primary">
+                    {exercise.workout_name}
+                  </Typography>
+                    {#if exercise.focus_areas}
+                    <div class="mt-2">
+                        <MuscleGroupCoverage muscleRatings={exercise.focus_areas} compact />
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div class="bg-surface-container-low p-3 rounded-lg">
+                  <Typography variant="body" size="sm" color="tertiary" as="p">
+                    SETS
+                  </Typography>
+                  <Typography variant="headline" size="md" color="primary" as="p">
+                    {exercise.sets}
+                  </Typography>
+                </div>
+                <div class="bg-surface-container-low p-3 rounded-lg">
+                  <Typography variant="body" size="sm" color="tertiary" as="p">
+                    REPS
+                  </Typography>
+                  <Typography variant="headline" size="md" color="primary" as="p">
+                    {exercise.target_reps}
+                  </Typography>
+                </div>
+                {#if exercise.target_weight}
+                  <div class="bg-surface-container-low p-3 rounded-lg">
+                    <Typography variant="body" size="sm" color="tertiary" as="p">
+                      WEIGHT
+                    </Typography>
+                    <Typography variant="headline" size="md" color="primary" as="p">
+                      {exercise.target_weight}kg
+                    </Typography>
+                  </div>
+                {/if}
+                <div class="flex items-end">
+                  <form method="POST" action="?/removeExercise" style="display: contents;">
+                    <input type="hidden" name="exerciseId" value={exercise.id} />
+                    <Button
+                      type="submit"
+                      variant="tertiary"
+                      size="sm"
+                      onclick={() => {
+                        if (!confirm(`Remove ${exercise.workout_name} from this plan?`)) {
+                          event?.preventDefault();
+                        }
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </Card>
+        {/each}
+      </div>
     {/if}
   </div>
 </div>
@@ -353,3 +389,4 @@
     color: inherit;
   }
 </style>
+

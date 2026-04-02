@@ -1,6 +1,7 @@
-import { getTrainingPlanWithWorkouts, getTrainingPlan, updateTrainingPlan as dbUpdateTrainingPlan, addPlanDay, addPlanWorkout, deletePlanWorkout, getAllWorkouts, getWorkout } from '$lib/db';
+import { getTrainingPlanWithExercises, getTrainingPlan, updateTrainingPlan as dbUpdateTrainingPlan, addPlanExercise, deletePlanExercise, getAllWorkouts } from '$lib/db';
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { createDefaultMuscleRatings, normalizeMuscleRatings } from '$lib/muscleGroups';
 
 export const load: PageServerLoad = async ({ params }) => {
   const id = parseInt(params.id);
@@ -9,35 +10,30 @@ export const load: PageServerLoad = async ({ params }) => {
     throw new Error('Invalid plan ID');
   }
 
-  const plan = await getTrainingPlanWithWorkouts(id);
+  const plan = await getTrainingPlanWithExercises(id);
   const workouts = await getAllWorkouts();
 
   if (!plan) {
     throw new Error('Training plan not found');
   }
 
-  // Collect focus areas from all workouts in the plan
-  const allFocusAreas: string[] = [];
+  // Aggregate muscle ratings across exercises using max rating per muscle.
+  const focusAreaRatings = createDefaultMuscleRatings();
 
-  if (plan.days && Array.isArray(plan.days)) {
-    for (const day of plan.days) {
-      if (day.workouts) {
-        try {
-          const workoutsArray = JSON.parse(`[${day.workouts}]`);
-          for (const workout of workoutsArray) {
-            const fullWorkout = await getWorkout(workout.workoutId);
-            if (fullWorkout && fullWorkout.focus_areas && Array.isArray(fullWorkout.focus_areas)) {
-              allFocusAreas.push(...fullWorkout.focus_areas);
-            }
+  if (plan.exercises && Array.isArray(plan.exercises)) {
+    for (const exercise of plan.exercises) {
+      if (exercise.focus_areas && typeof exercise.focus_areas === 'object') {
+        const normalized = normalizeMuscleRatings(exercise.focus_areas);
+        for (const [group, rating] of Object.entries(normalized)) {
+          if (rating > focusAreaRatings[group]) {
+            focusAreaRatings[group] = rating;
           }
-        } catch (e) {
-          // Skip parsing errors
         }
       }
     }
   }
 
-  return { plan, workouts, focusAreas: allFocusAreas };
+  return { plan, workouts, focusAreaRatings };
 };
 
 export const actions: Actions = {
@@ -72,69 +68,53 @@ export const actions: Actions = {
     }
   },
 
-  addDay: async ({ request, params }) => {
+  addExercise: async ({ request, params }) => {
     const id = parseInt(params.id);
     const data = await request.formData();
-    const dayOfWeek = data.get('day') as string;
-
-    if (!dayOfWeek) {
-      return fail(400, { message: 'Day is required' });
-    }
-
-    try {
-      await addPlanDay(id, dayOfWeek);
-      return { success: true };
-    } catch (error) {
-      console.error('Error adding day:', error);
-      if ((error as any)?.message?.includes('UNIQUE constraint failed')) {
-        return fail(400, { message: 'This day has already been added to the plan' });
-      }
-      return fail(500, { message: 'Failed to add day' });
-    }
-  },
-
-  addWorkoutToDay: async ({ request }) => {
-    const data = await request.formData();
-    const planDayId = parseInt(data.get('planDayId') as string);
     const workoutId = parseInt(data.get('workoutId') as string);
-    const targetReps = parseInt(data.get('targetReps') as string);
-    const targetWeight = data.get('targetWeight') ? parseFloat(data.get('targetWeight') as string) : undefined;
+    const sets = parseInt(data.get('sets') as string);
+    const reps = parseInt(data.get('reps') as string);
+    const weight = data.get('weight') ? parseFloat(data.get('weight') as string) : undefined;
 
-    if (!planDayId || !workoutId || !targetReps) {
+    if (!workoutId || !sets || !reps) {
       return fail(400, { message: 'Missing required fields' });
     }
 
-    if (targetReps < 1 || targetReps > 1000) {
-      return fail(400, { message: 'Target reps must be between 1 and 1000' });
+    if (sets < 1 || sets > 100) {
+      return fail(400, { message: 'Sets must be between 1 and 100' });
     }
 
-    if (targetWeight !== undefined && (targetWeight < 0 || targetWeight > 10000)) {
-      return fail(400, { message: 'Target weight must be between 0 and 10000' });
+    if (reps < 1 || reps > 1000) {
+      return fail(400, { message: 'Reps must be between 1 and 1000' });
+    }
+
+    if (weight !== undefined && (weight < 0 || weight > 10000)) {
+      return fail(400, { message: 'Weight must be between 0 and 10000' });
     }
 
     try {
-      await addPlanWorkout(planDayId, workoutId, targetReps, targetWeight);
+      await addPlanExercise(id, workoutId, sets, reps, weight);
       return { success: true };
     } catch (error) {
-      console.error('Error adding workout to day:', error);
-      return fail(500, { message: 'Failed to add workout' });
+      console.error('Error adding exercise:', error);
+      return fail(500, { message: 'Failed to add exercise' });
     }
   },
 
-  removeWorkoutFromDay: async ({ request }) => {
+  removeExercise: async ({ request }) => {
     const data = await request.formData();
-    const planWorkoutId = parseInt(data.get('planWorkoutId') as string);
+    const exerciseId = parseInt(data.get('exerciseId') as string);
 
-    if (!planWorkoutId) {
-      return fail(400, { message: 'Workout ID is required' });
+    if (!exerciseId) {
+      return fail(400, { message: 'Exercise ID is required' });
     }
 
     try {
-      await deletePlanWorkout(planWorkoutId);
+      await deletePlanExercise(exerciseId);
       return { success: true };
     } catch (error) {
-      console.error('Error removing workout:', error);
-      return fail(500, { message: 'Failed to remove workout' });
+      console.error('Error removing exercise:', error);
+      return fail(500, { message: 'Failed to remove exercise' });
     }
   }
 };

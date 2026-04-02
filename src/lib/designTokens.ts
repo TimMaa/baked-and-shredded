@@ -179,22 +179,25 @@ export const getDynamicClasses = {
     return 'list-item';
   },
 
-  text: (variant: 'display' | 'headline' | 'body' = 'body', size: 'lg' | 'md' | 'sm' = 'md') => {
+  text: (variant: 'display' | 'headline' | 'body' = 'body', size: 'lg' | 'md' | 'sm' | 'xs' = 'md') => {
     const textClasses = {
       display: {
         lg: 'text-display-lg',
         md: 'text-display-md',
         sm: 'text-display-sm',
+        xs: 'text-display-sm',
       },
       headline: {
         lg: 'text-headline-lg',
         md: 'text-headline-md',
         sm: 'text-headline-sm',
+        xs: 'text-headline-sm',
       },
       body: {
         lg: 'text-body-lg',
         md: 'text-body-md',
         sm: 'text-body-sm',
+        xs: 'text-body-xs',
       },
     };
     return textClasses[variant][size];

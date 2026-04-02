@@ -22,16 +22,9 @@
     successMessage = null;
   };
 
-  const handleDeletePlan = (name: string) => {
-    if (!confirm(`Are you sure you want to delete the plan "${name}"? This will also delete all associated workout sessions.`)) {
-      return false;
-    }
-    return true;
-  };
-
   $effect(() => {
     if (form?.success) {
-      successMessage = "Operation completed successfully";
+      successMessage = "Training plan created successfully";
       formName = "";
       formDescription = "";
       showForm = false;
@@ -65,18 +58,18 @@
 
   <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
     <div>
-      <Typography variant="display" size="sm" as="h1" color="secondary">
+      <Typography variant="display" size="sm" as="h1" color="primary">
         Training Plans
       </Typography>
       <Typography variant="body" size="md" color="tertiary" as="p">
-        Structure your weekly workouts
+        Set up workout sessions with targeted exercises
       </Typography>
     </div>
     {#if !showForm}
       <Button
         variant="primary"
         size="md"
-        onclick={() => (showForm = !showForm)}
+        onclick={() => (showForm = true)}
       >
         + Create Plan
       </Button>
@@ -105,7 +98,7 @@
                 name="name"
                 required
                 bind:value={formName}
-                placeholder="e.g., Push Pull Legs"
+                placeholder="e.g., Monday Upper Body"
               />
             </div>
           </div>
@@ -157,28 +150,34 @@
   {/if}
 
   {#await data.plans}
-    <div>Loading...</div>
+    <div class="py-8">
+      <Typography variant="body" size="md" color="tertiary" as="p">
+        Loading training plans...
+      </Typography>
+    </div>
   {:then plans}
     <div class="space-y-3 sm:space-y-4">
       {#if plans.length === 0}
         <Card>
           <Typography variant="body" size="md" color="tertiary" as="p">
-            No training plans yet. Create your first plan!
+            No training plans yet. Create your first plan to get started!
           </Typography>
         </Card>
       {:else}
         {#each plans as plan (plan.id)}
           <Card>
             <div class="flex flex-col gap-3 sm:gap-6 sm:flex-row sm:justify-between sm:items-start">
-              <a href="/plans/{plan.id}" class="flex-1 min-w-0 no-underline">
-                <Typography
-                  variant="headline"
-                  size="sm"
-                  as="h2"
-                  color="secondary"
-                >
-                  {plan.name}
-                </Typography>
+              <div class="flex-1 min-w-0">
+                <a href="/plans/{plan.id}" class="no-underline hover:opacity-80 transition-opacity">
+                  <Typography
+                    variant="headline"
+                    size="sm"
+                    as="h2"
+                    color="primary"
+                  >
+                    {plan.name}
+                  </Typography>
+                </a>
                 {#if plan.description}
                   <Typography
                     variant="body"
@@ -189,28 +188,32 @@
                     {plan.description}
                   </Typography>
                 {/if}
-                <Typography variant="body" size="sm" color="tertiary" as="p">
-                  Created {new Date(plan.created_at).toLocaleDateString()}
-                </Typography>
-                {#if plan.focusAreas && plan.focusAreas.length > 0}
-                  <div class="mt-3 pt-3 border-t border-gray-200">
-                    <MuscleGroupCoverage focusAreas={plan.focusAreas} compact />
-                  </div>
-                {/if}
-              </a>
-                <div class="flex flex-col gap-2 sm:flex-row sm:gap-3 shrink-0 w-full sm:w-auto">
+                <div class="mt-3 space-y-2">
+                  <Typography variant="body" size="sm" color="tertiary" as="p">
+                    {plan.exerciseCount} {plan.exerciseCount === 1 ? 'exercise' : 'exercises'} • Created {new Date(plan.created_at).toLocaleDateString()}
+                  </Typography>
+                  {#if plan.focusAreaRatings}
+                    <MuscleGroupCoverage muscleRatings={plan.focusAreaRatings} compact />
+                  {/if}
+                </div>
+              </div>
+              <div class="flex flex-col gap-2 sm:flex-row sm:gap-3 shrink-0 w-full sm:w-auto">
                 <a href="/plans/{plan.id}" class="no-underline">
                   <Button variant="secondary" size="sm">
-                    View / Edit
+                    Edit
                   </Button>
                 </a>
-                <form method="POST" action="?/deletePlan">
+                <form method="POST" action="?/deletePlan" style="display: contents;">
                   <input type="hidden" name="id" value={plan.id} />
                   <Button
                     type="submit"
                     variant="tertiary"
                     size="sm"
-                    onclick={() => handleDeletePlan(plan.name)}
+                    onclick={() => {
+                      if (!confirm(`Are you sure you want to delete "${plan.name}"?`)) {
+                        event?.preventDefault();
+                      }
+                    }}
                   >
                     Delete
                   </Button>

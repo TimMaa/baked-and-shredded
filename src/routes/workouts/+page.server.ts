@@ -1,24 +1,58 @@
 import { createWorkout, getAllWorkouts, updateWorkout, deleteWorkout, getWorkout } from '$lib/db';
 import { fail } from '@sveltejs/kit';
+import {
+  ALL_MUSCLE_GROUPS,
+  MAX_MUSCLE_POINTS,
+  normalizeMuscleRatings,
+  totalMusclePoints,
+  type MuscleRatings,
+} from '$lib/muscleGroups';
 
 export const load = async () => {
-  const workouts = getAllWorkouts();
+  const workouts = await getAllWorkouts();
   return { workouts };
 };
+
+function parseMuscleRatings(muscleRatingsStr: string): { ratings: MuscleRatings; error?: string } {
+  let parsed: unknown = {};
+  try {
+    parsed = JSON.parse(muscleRatingsStr || '{}');
+  } catch {
+    return { ratings: normalizeMuscleRatings({}), error: 'Invalid muscle rating payload' };
+  }
+
+  const ratings = normalizeMuscleRatings(parsed);
+
+  // Reject unknown muscle groups if present in payload.
+  if (parsed && typeof parsed === 'object') {
+    const unknownGroups = Object.keys(parsed as Record<string, unknown>).filter(
+      (group) => !ALL_MUSCLE_GROUPS.includes(group)
+    );
+    if (unknownGroups.length > 0) {
+      return { ratings, error: 'Unknown muscle groups provided' };
+    }
+  }
+
+  const total = totalMusclePoints(ratings);
+  if (total === 0) {
+    return { ratings, error: 'Rate at least one muscle group above 0' };
+  }
+
+  if (total > MAX_MUSCLE_POINTS) {
+    return { ratings, error: `Total muscle rating points cannot exceed ${MAX_MUSCLE_POINTS}` };
+  }
+
+  return { ratings };
+}
 
 export const actions = {
   addWorkout: async ({ request }) => {
     const data = await request.formData();
     const name = (data.get('name') as string)?.trim();
     const description = (data.get('description') as string)?.trim();
-    const focusAreasStr = (data.get('focusAreas') as string) || '[]';
-    let focusAreas: string[] = [];
-
-    try {
-      focusAreas = JSON.parse(focusAreasStr);
-    } catch (e) {
-      focusAreas = [];
-    }
+    const tip = (data.get('tip') as string)?.trim();
+    const muscleRatingsStr = (data.get('muscleRatings') as string) || '{}';
+    const { ratings, error: ratingsError } = parseMuscleRatings(muscleRatingsStr);
 
     if (!name) {
       return fail(400, { message: 'Workout name is required' });
@@ -36,8 +70,8 @@ export const actions = {
       return fail(400, { message: 'Description must be at least 5 characters' });
     }
 
-    if (focusAreas.length === 0) {
-      return fail(400, { message: 'Please select at least one muscle group' });
+    if (ratingsError) {
+      return fail(400, { message: ratingsError });
     }
 
     // Check for duplicate name
@@ -47,7 +81,7 @@ export const actions = {
     }
 
     try {
-      await createWorkout(name, description, focusAreas);
+      await createWorkout(name, description, tip, ratings);
       return { success: true };
     } catch (error) {
       console.error('Error creating workout:', error);
@@ -60,14 +94,9 @@ export const actions = {
     const id = parseInt(data.get('id') as string);
     const name = (data.get('name') as string)?.trim();
     const description = (data.get('description') as string)?.trim();
-    const focusAreasStr = (data.get('focusAreas') as string) || '[]';
-    let focusAreas: string[] = [];
-
-    try {
-      focusAreas = JSON.parse(focusAreasStr);
-    } catch (e) {
-      focusAreas = [];
-    }
+    const tip = (data.get('tip') as string)?.trim();
+    const muscleRatingsStr = (data.get('muscleRatings') as string) || '{}';
+    const { ratings, error: ratingsError } = parseMuscleRatings(muscleRatingsStr);
 
     if (!id) {
       return fail(400, { message: 'Workout ID is required' });
@@ -89,8 +118,8 @@ export const actions = {
       return fail(400, { message: 'Description must be at least 5 characters' });
     }
 
-    if (focusAreas.length === 0) {
-      return fail(400, { message: 'Please select at least one muscle group' });
+    if (ratingsError) {
+      return fail(400, { message: ratingsError });
     }
 
     // Check for duplicate name (excluding current workout)
@@ -107,7 +136,7 @@ export const actions = {
     }
 
     try {
-      await updateWorkout(id, name, description, focusAreas);
+      await updateWorkout(id, name, description, tip, ratings);
       return { success: true };
     } catch (error) {
       console.error('Error updating workout:', error);
