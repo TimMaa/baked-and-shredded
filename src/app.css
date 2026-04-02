@@ -191,6 +191,7 @@ body {
   border-radius: var(--radius-xl);
   padding: var(--spacing-6);
   transition: all 0.3s ease;
+  margin-bottom: 16px;
 }
 
 .card:hover {
@@ -255,22 +256,42 @@ body {
   transform: translateY(0);
 }
 
-/* Tertiary Button (Ghost) */
+/* Tertiary Button (Subtle Surface) */
 .btn-tertiary {
-  background-color: transparent;
+  background-color: var(--surface-container-low);
   color: var(--tertiary);
   font-family: var(--font-heading);
   font-weight: 700;
-  padding: var(--spacing-3) var(--spacing-6);
-  border: none;
-  border-bottom: 2px solid var(--tertiary);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
 
 .btn-tertiary:hover {
-  border-bottom-color: var(--primary);
+  background-color: var(--surface-container);
+  border-color: var(--tertiary-container);
   color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.btn-tertiary:active {
+  background-color: var(--surface-container-low);
+  border-color: var(--tertiary);
+  color: var(--tertiary);
+  transform: translateY(0);
+}
+
+.btn-tertiary:focus-visible {
+  outline: 2px solid var(--tertiary);
+  outline-offset: 2px;
+}
+
+.btn-tertiary:disabled {
+  color: var(--outline);
+  border-color: var(--outline-variant);
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* Button Sizes */
@@ -297,6 +318,7 @@ input[type="text"],
 input[type="number"],
 input[type="email"],
 input[type="password"],
+select,
 textarea {
   background-color: var(--surface-container-lowest);
   color: #e8e1d9;
@@ -307,12 +329,38 @@ textarea {
   border-radius: var(--radius-xs);
   transition: border-color 0.2s ease;
   font-size: 1rem;
+  line-height: 1.25;
+  box-sizing: border-box;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+select {
+  min-height: 3.75rem;
+}
+
+textarea {
+  min-height: 7.5rem;
+}
+
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: calc(var(--spacing-5) + 1.25rem);
+  background-image: linear-gradient(45deg, transparent 50%, #e8e1d9 50%),
+    linear-gradient(135deg, #e8e1d9 50%, transparent 50%);
+  background-position: calc(100% - 1.05rem) calc(50% - 0.12rem), calc(100% - 0.75rem) calc(50% - 0.12rem);
+  background-size: 0.32rem 0.32rem, 0.32rem 0.32rem;
+  background-repeat: no-repeat;
 }
 
 input[type="text"]:focus,
 input[type="number"]:focus,
 input[type="email"]:focus,
 input[type="password"]:focus,
+select:focus,
 textarea:focus {
   outline: none;
   border-bottom-color: var(--primary);
@@ -320,6 +368,7 @@ textarea:focus {
 }
 
 input[type="text"]::placeholder,
+input[type="number"]::placeholder,
 textarea::placeholder {
   color: rgba(232, 225, 217, 0.5);
 }

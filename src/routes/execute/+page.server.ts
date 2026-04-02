@@ -1,6 +1,6 @@
-import { getAllTrainingPlans } from '$lib/db';
+import { getAllWorkouts } from '$lib/db';
 
 export const load = async () => {
-  const plans = await getAllTrainingPlans();
-  return { plans };
+  const plans = await getAllWorkouts();
+  return { plans, workouts: plans };
 };

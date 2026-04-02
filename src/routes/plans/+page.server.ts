@@ -1,40 +1,38 @@
-import { getAllTrainingPlans, createTrainingPlan, deleteTrainingPlan, getTrainingPlan, getTrainingPlanWithExercises } from '$lib/db';
+import { getAllWorkouts, createWorkout, deleteWorkout, getWorkout, getWorkoutWithExercises } from '$lib/db';
 import { fail } from '@sveltejs/kit';
 import { createDefaultMuscleRatings, normalizeMuscleRatings } from '$lib/muscleGroups';
 
 export const load = async () => {
-  const plans = await getAllTrainingPlans();
+  const workouts = await getAllWorkouts();
 
-  // Enrich each plan with muscle group coverage from its exercises
-  const enrichedPlans = await Promise.all(
-    plans.map(async (plan: any) => {
-      const planWithExercises = await getTrainingPlanWithExercises(plan.id);
+  // Enrich each workout with muscle group coverage from its exercises
+  const enrichedWorkouts = await Promise.all(
+    workouts.map(async (workout: any) => {
+      const workoutWithExercises = await getWorkoutWithExercises(workout.id);
 
-      // Aggregate muscle ratings across exercises using max rating per muscle.
+      // Aggregate muscle ratings across exercises by summing per-muscle contribution.
       const focusAreaRatings = createDefaultMuscleRatings();
 
-      if (planWithExercises?.exercises && Array.isArray(planWithExercises.exercises)) {
-        for (const exercise of planWithExercises.exercises) {
+      if (workoutWithExercises?.exercises && Array.isArray(workoutWithExercises.exercises)) {
+        for (const exercise of workoutWithExercises.exercises) {
           if (exercise.focus_areas && typeof exercise.focus_areas === 'object') {
             const normalized = normalizeMuscleRatings(exercise.focus_areas);
             for (const [group, rating] of Object.entries(normalized)) {
-              if (rating > focusAreaRatings[group]) {
-                focusAreaRatings[group] = rating;
-              }
+              focusAreaRatings[group] = (focusAreaRatings[group] ?? 0) + Number(rating || 0);
             }
           }
         }
       }
 
       return {
-        ...plan,
-        exerciseCount: planWithExercises?.exercises?.length || 0,
+        ...workout,
+        exerciseCount: workoutWithExercises?.exercises?.length || 0,
         focusAreaRatings,
       };
     })
   );
 
-  return { plans: enrichedPlans };
+  return { plans: enrichedWorkouts };
 };
 
 export const actions = {
@@ -44,11 +42,11 @@ export const actions = {
     const description = (data.get('description') as string)?.trim();
 
     if (!name) {
-      return fail(400, { message: 'Plan name is required' });
+      return fail(400, { message: 'Workout name is required' });
     }
 
     if (name.length < 2) {
-      return fail(400, { message: 'Plan name must be at least 2 characters' });
+      return fail(400, { message: 'Workout name must be at least 2 characters' });
     }
 
     if (!description) {
@@ -60,17 +58,17 @@ export const actions = {
     }
 
     // Check for duplicate name
-    const plans = await getAllTrainingPlans();
-    if (plans.some((p: any) => p.name.toLowerCase() === name.toLowerCase())) {
-      return fail(400, { message: 'A training plan with this name already exists' });
+    const workouts = await getAllWorkouts();
+    if (workouts.some((w: any) => w.name.toLowerCase() === name.toLowerCase())) {
+      return fail(400, { message: 'A workout with this name already exists' });
     }
 
     try {
-      await createTrainingPlan(name, description);
+      await createWorkout(name, description);
       return { success: true };
     } catch (error) {
-      console.error('Error creating training plan:', error);
-      return fail(500, { message: 'Failed to create training plan' });
+      console.error('Error creating workout:', error);
+      return fail(500, { message: 'Failed to create workout' });
     }
   },
 
@@ -79,20 +77,20 @@ export const actions = {
     const id = parseInt(data.get('id') as string);
 
     if (!id) {
-      return fail(400, { message: 'Plan ID is required' });
+      return fail(400, { message: 'Workout ID is required' });
     }
 
-    const plan = await getTrainingPlan(id);
-    if (!plan) {
-      return fail(404, { message: 'Training plan not found' });
+    const workout = await getWorkout(id);
+    if (!workout) {
+      return fail(404, { message: 'Workout not found' });
     }
 
     try {
-      await deleteTrainingPlan(id);
+      await deleteWorkout(id);
       return { success: true };
     } catch (error) {
-      console.error('Error deleting training plan:', error);
-      return fail(500, { message: 'Failed to delete training plan' });
+      console.error('Error deleting workout:', error);
+      return fail(500, { message: 'Failed to delete workout' });
     }
   }
 };

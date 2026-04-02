@@ -55,9 +55,9 @@ export async function getDb() {
 function initializeSchema() {
   if (!db) return;
 
-  // Workouts table
+  // Exercises table
   db.run(`
-    CREATE TABLE IF NOT EXISTS workouts (
+    CREATE TABLE IF NOT EXISTS exercises (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       description TEXT,
@@ -69,14 +69,14 @@ function initializeSchema() {
 
   // Backfill tip column for existing databases.
   try {
-    db.run('ALTER TABLE workouts ADD COLUMN tip TEXT');
+    db.run('ALTER TABLE exercises ADD COLUMN tip TEXT');
   } catch {
     // Column already exists.
   }
 
-  // Training Plans table (single workout session)
+  // Workouts table (planned combination of exercises)
   db.run(`
-    CREATE TABLE IF NOT EXISTS training_plans (
+    CREATE TABLE IF NOT EXISTS workouts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       description TEXT,
@@ -84,21 +84,29 @@ function initializeSchema() {
     )
   `);
 
-  // Plan Exercises table (exercises in a training plan)
+  // Workout Exercises table (exercises in a workout)
   db.run(`
-    CREATE TABLE IF NOT EXISTS plan_exercises (
+    CREATE TABLE IF NOT EXISTS workout_exercises (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      plan_id INTEGER NOT NULL,
       workout_id INTEGER NOT NULL,
+      exercise_id INTEGER NOT NULL,
       sets INTEGER NOT NULL DEFAULT 1,
       target_reps INTEGER NOT NULL,
       target_weight REAL,
+      target_unit TEXT NOT NULL DEFAULT 'kg',
       order_index INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (plan_id) REFERENCES training_plans(id) ON DELETE CASCADE,
-      FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
+      FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE,
+      FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
     )
   `);
+
+  // Backfill target_unit for existing databases.
+  try {
+    db.run("ALTER TABLE workout_exercises ADD COLUMN target_unit TEXT NOT NULL DEFAULT 'kg'");
+  } catch {
+    // Column already exists.
+  }
 
   saveDb();
 }
@@ -149,11 +157,11 @@ function dbRun(query: string, params: any[] = []) {
   }
 }
 
-// Helper functions for workouts
-function parseWorkoutData(workout: any) {
-  if (workout && workout.focus_areas) {
+// Helper functions for exercises
+function parseExerciseData(exercise: any) {
+  if (exercise && exercise.focus_areas) {
     try {
-      const parsedFocusAreas = JSON.parse(workout.focus_areas);
+      const parsedFocusAreas = JSON.parse(exercise.focus_areas);
 
       // Backward compatibility for old array-based focus areas.
       if (Array.isArray(parsedFocusAreas)) {
@@ -163,25 +171,25 @@ function parseWorkoutData(workout: any) {
             baseRatings[group] = 1;
           }
         }
-        workout.focus_areas = baseRatings;
+        exercise.focus_areas = baseRatings;
       } else {
-        workout.focus_areas = normalizeMuscleRatings(parsedFocusAreas);
+        exercise.focus_areas = normalizeMuscleRatings(parsedFocusAreas);
       }
     } catch (e) {
-      workout.focus_areas = createDefaultMuscleRatings();
+      exercise.focus_areas = createDefaultMuscleRatings();
     }
-  } else if (workout) {
-    workout.focus_areas = createDefaultMuscleRatings();
+  } else if (exercise) {
+    exercise.focus_areas = createDefaultMuscleRatings();
   }
 
-  if (workout && typeof workout.tip !== 'string') {
-    workout.tip = '';
+  if (exercise && typeof exercise.tip !== 'string') {
+    exercise.tip = '';
   }
 
-  return workout;
+  return exercise;
 }
 
-export async function createWorkout(
+export async function createExercise(
   name: string,
   description?: string,
   tip?: string,
@@ -189,7 +197,7 @@ export async function createWorkout(
 ) {
   await initDb();
   const focusAreasJson = focusAreas ? JSON.stringify(focusAreas) : null;
-  dbRun('INSERT INTO workouts (name, description, tip, focus_areas) VALUES (?, ?, ?, ?)', [
+  dbRun('INSERT INTO exercises (name, description, tip, focus_areas) VALUES (?, ?, ?, ?)', [
     name,
     description || null,
     tip || null,
@@ -197,19 +205,19 @@ export async function createWorkout(
   ]);
 }
 
-export async function getAllWorkouts() {
+export async function getAllExercises() {
   await initDb();
-  const workouts = dbAll('SELECT * FROM workouts ORDER BY name');
-  return workouts.map(parseWorkoutData);
+  const exercises = dbAll('SELECT * FROM exercises ORDER BY name');
+  return exercises.map(parseExerciseData);
 }
 
-export async function getWorkout(id: number) {
+export async function getExercise(id: number) {
   await initDb();
-  const workout = dbGet('SELECT * FROM workouts WHERE id = ?', [id]);
-  return parseWorkoutData(workout);
+  const exercise = dbGet('SELECT * FROM exercises WHERE id = ?', [id]);
+  return parseExerciseData(exercise);
 }
 
-export async function updateWorkout(
+export async function updateExercise(
   id: number,
   name: string,
   description?: string,
@@ -218,7 +226,7 @@ export async function updateWorkout(
 ) {
   await initDb();
   const focusAreasJson = focusAreas ? JSON.stringify(focusAreas) : null;
-  dbRun('UPDATE workouts SET name = ?, description = ?, tip = ?, focus_areas = ? WHERE id = ?', [
+  dbRun('UPDATE exercises SET name = ?, description = ?, tip = ?, focus_areas = ? WHERE id = ?', [
     name,
     description || null,
     tip || null,
@@ -227,51 +235,52 @@ export async function updateWorkout(
   ]);
 }
 
-export async function deleteWorkout(id: number) {
+export async function deleteExercise(id: number) {
   await initDb();
-  dbRun('DELETE FROM workouts WHERE id = ?', [id]);
+  dbRun('DELETE FROM exercises WHERE id = ?', [id]);
 }
 
-// Helper functions for training plans
-export async function createTrainingPlan(name: string, description?: string) {
+// Helper functions for workouts
+export async function createWorkout(name: string, description?: string) {
   await initDb();
-  dbRun('INSERT INTO training_plans (name, description) VALUES (?, ?)', [name, description || null]);
+  dbRun('INSERT INTO workouts (name, description) VALUES (?, ?)', [name, description || null]);
 }
 
-export async function getAllTrainingPlans() {
+export async function getAllWorkouts() {
   await initDb();
-  return dbAll('SELECT * FROM training_plans ORDER BY created_at DESC');
+  return dbAll('SELECT * FROM workouts ORDER BY created_at DESC');
 }
 
-export async function getTrainingPlan(id: number) {
+export async function getWorkout(id: number) {
   await initDb();
-  return dbGet('SELECT * FROM training_plans WHERE id = ?', [id]);
+  return dbGet('SELECT * FROM workouts WHERE id = ?', [id]);
 }
 
-export async function getTrainingPlanWithExercises(id: number) {
+export async function getWorkoutWithExercises(id: number) {
   await initDb();
-  const plan = await getTrainingPlan(id);
-  if (!plan) return null;
+  const workout = await getWorkout(id);
+  if (!workout) return null;
 
   const exercises = dbAll(
     `SELECT
-      pe.id,
-      pe.workout_id,
-      w.name as workout_name,
-      w.focus_areas,
-      pe.sets,
-      pe.target_reps,
-      pe.target_weight,
-      pe.order_index
-    FROM plan_exercises pe
-    LEFT JOIN workouts w ON pe.workout_id = w.id
-    WHERE pe.plan_id = ?
-    ORDER BY pe.order_index ASC`,
+      we.id,
+      we.exercise_id,
+      e.name as exercise_name,
+      e.focus_areas,
+      we.sets,
+      we.target_reps,
+      we.target_weight,
+      we.target_unit,
+      we.order_index
+    FROM workout_exercises we
+    LEFT JOIN exercises e ON we.exercise_id = e.id
+    WHERE we.workout_id = ?
+    ORDER BY we.order_index ASC, we.id ASC`,
     [id]
   );
 
   return {
-    ...plan,
+    ...workout,
     exercises: exercises.map((ex: any) => ({
       ...ex,
       focus_areas: ex.focus_areas ? normalizeMuscleRatings(JSON.parse(ex.focus_areas)) : createDefaultMuscleRatings()
@@ -279,62 +288,68 @@ export async function getTrainingPlanWithExercises(id: number) {
   };
 }
 
-export async function deleteTrainingPlan(id: number) {
+export async function deleteWorkout(id: number) {
   await initDb();
-  dbRun('DELETE FROM training_plans WHERE id = ?', [id]);
+  dbRun('DELETE FROM workouts WHERE id = ?', [id]);
 }
 
-export async function updateTrainingPlan(id: number, name: string, description?: string) {
+export async function updateWorkout(id: number, name: string, description?: string) {
   await initDb();
-  dbRun('UPDATE training_plans SET name = ?, description = ? WHERE id = ?', [name, description || null, id]);
+  dbRun('UPDATE workouts SET name = ?, description = ? WHERE id = ?', [name, description || null, id]);
 }
 
-// Helper functions for plan exercises
-export async function addPlanExercise(
-  planId: number,
+// Helper functions for workout exercises
+export async function addWorkoutExercise(
   workoutId: number,
-  sets: number,
-  targetReps: number,
-  targetWeight?: number,
-  orderIndex: number = 0
-) {
-  await initDb();
-  dbRun(
-    'INSERT INTO plan_exercises (plan_id, workout_id, sets, target_reps, target_weight, order_index) VALUES (?, ?, ?, ?, ?, ?)',
-    [planId, workoutId, sets, targetReps, targetWeight || null, orderIndex]
-  );
-}
-
-export async function updatePlanExercise(
   exerciseId: number,
   sets: number,
   targetReps: number,
-  targetWeight?: number
+  targetWeight: number,
+  targetUnit: 'kg' | 's' = 'kg'
 ) {
   await initDb();
+  const row = dbGet('SELECT COALESCE(MAX(order_index), -1) as max_order FROM workout_exercises WHERE workout_id = ?', [
+    workoutId,
+  ]) as { max_order?: number } | null;
+  const nextOrderIndex = Number((row?.max_order ?? -1)) + 1;
+
   dbRun(
-    'UPDATE plan_exercises SET sets = ?, target_reps = ?, target_weight = ? WHERE id = ?',
-    [sets, targetReps, targetWeight || null, exerciseId]
+    'INSERT INTO workout_exercises (workout_id, exercise_id, sets, target_reps, target_weight, target_unit, order_index) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [workoutId, exerciseId, sets, targetReps, targetWeight, targetUnit, nextOrderIndex]
   );
 }
 
-export async function deletePlanExercise(id: number) {
+export async function updateWorkoutExercise(
+  exerciseId: number,
+  sets: number,
+  targetReps: number,
+  targetWeight: number,
+  targetUnit: 'kg' | 's' = 'kg'
+) {
   await initDb();
-  dbRun('DELETE FROM plan_exercises WHERE id = ?', [id]);
+  dbRun(
+    'UPDATE workout_exercises SET sets = ?, target_reps = ?, target_weight = ?, target_unit = ? WHERE id = ?',
+    [sets, targetReps, targetWeight, targetUnit, exerciseId]
+  );
 }
 
-export async function reorderPlanExercises(planId: number, exerciseIds: number[]) {
+export async function deleteWorkoutExercise(id: number) {
+  await initDb();
+  dbRun('DELETE FROM workout_exercises WHERE id = ?', [id]);
+}
+
+export async function reorderWorkoutExercises(workoutId: number, exerciseIds: number[]) {
   await initDb();
   exerciseIds.forEach((id, index) => {
-    dbRun('UPDATE plan_exercises SET order_index = ? WHERE id = ?', [index, id]);
+    dbRun('UPDATE workout_exercises SET order_index = ? WHERE id = ? AND workout_id = ?', [index, id, workoutId]);
   });
 }
 
 // Helper functions for workout sessions
-export async function createWorkoutSession(planId: number, sessionDate: string, dayOfWeek: string) {
+export async function createWorkoutSession(workoutId: number, sessionDate: string, dayOfWeek: string) {
   await initDb();
-  dbRun('INSERT INTO workout_sessions (plan_id, session_date, day_of_week) VALUES (?, ?, ?)', [
-    planId,
+  dbRun('INSERT INTO workout_sessions (workout_id, session_date, day_of_week) VALUES (?, ?, ?)', [
+    workoutId,
     sessionDate,
     dayOfWeek,
   ]);
@@ -342,27 +357,27 @@ export async function createWorkoutSession(planId: number, sessionDate: string, 
 
 export async function logSessionSet(
   sessionId: number,
-  planWorkoutId: number,
-  workoutId: number,
+  workoutExerciseId: number,
+  exerciseId: number,
   completedReps?: number,
   completedWeight?: number
 ) {
   await initDb();
   dbRun(
-    'INSERT INTO session_sets (session_id, plan_workout_id, workout_id, completed_reps, completed_weight) VALUES (?, ?, ?, ?, ?)',
-    [sessionId, planWorkoutId, workoutId, completedReps || null, completedWeight || null]
+    'INSERT INTO session_sets (session_id, workout_exercise_id, exercise_id, completed_reps, completed_weight) VALUES (?, ?, ?, ?, ?)',
+    [sessionId, workoutExerciseId, exerciseId, completedReps || null, completedWeight || null]
   );
 }
 
 export async function getSessionSets(sessionId: number) {
   await initDb();
   return dbAll(
-    `SELECT ss.*, w.name as workout_name, pw.target_reps, pw.target_weight
+    `SELECT ss.*, e.name as exercise_name, we.target_reps, we.target_weight, we.target_unit
     FROM session_sets ss
-    JOIN workouts w ON ss.workout_id = w.id
-    LEFT JOIN plan_workouts pw ON ss.plan_workout_id = pw.id
+    JOIN exercises e ON ss.exercise_id = e.id
+    LEFT JOIN workout_exercises we ON ss.workout_exercise_id = we.id
     WHERE ss.session_id = ?
-    ORDER BY w.name`,
+    ORDER BY e.name`,
     [sessionId]
   );
 }

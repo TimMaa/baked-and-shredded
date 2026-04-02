@@ -3,6 +3,7 @@
   import {
     MUSCLE_GROUP_CATEGORIES,
     createDefaultMuscleRatings,
+    getMuscleGroupLabel,
     totalMusclePoints,
     type MuscleRatings,
   } from "$lib/muscleGroups";
@@ -110,7 +111,7 @@
           <div class="p-3 sm:p-4 rounded-xl bg-surface-container-low space-y-3">
             <div class="flex items-start justify-between gap-3">
               <Typography variant="body" size="sm" color="default" as="span">
-                {group}
+                {getMuscleGroupLabel(group)}
               </Typography>
               <span class="rating-badge">{selected[group] ?? 0}/5</span>
             </div>

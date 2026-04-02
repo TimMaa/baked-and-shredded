@@ -21,12 +21,12 @@
       </a>
       <div class="flex flex-wrap gap-3 sm:gap-8 text-sm sm:text-body-md">
         <a
-          href="/workouts"
-          class="text-tertiary hover:text-primary transition-colors">Workouts</a
+          href="/exercises"
+          class="text-tertiary hover:text-primary transition-colors">Exercises</a
         >
         <a
           href="/plans"
-          class="text-tertiary hover:text-primary transition-colors">Plans</a
+          class="text-tertiary hover:text-primary transition-colors">Workouts</a
         >
         <a
           href="/execute"

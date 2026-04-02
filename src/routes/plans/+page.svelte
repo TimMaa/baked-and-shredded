@@ -16,7 +16,7 @@
   let errorMessage = $state<string | null>(null);
   let successMessage = $state<string | null>(null);
 
-  const handleCreatePlan = async (e: Event) => {
+  const handleCreateWorkout = async (e: Event) => {
     isSubmitting = true;
     errorMessage = null;
     successMessage = null;
@@ -24,7 +24,7 @@
 
   $effect(() => {
     if (form?.success) {
-      successMessage = "Training plan created successfully";
+      successMessage = "Workout created successfully";
       formName = "";
       formDescription = "";
       showForm = false;
@@ -59,10 +59,10 @@
   <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
     <div>
       <Typography variant="display" size="sm" as="h1" color="primary">
-        Training Plans
+        Workouts
       </Typography>
       <Typography variant="body" size="md" color="tertiary" as="p">
-        Set up workout sessions with targeted exercises
+        Build weekly programming with targeted exercises
       </Typography>
     </div>
     {#if !showForm}
@@ -71,7 +71,7 @@
         size="md"
         onclick={() => (showForm = true)}
       >
-        + Create Plan
+        + Create Workout
       </Button>
     {/if}
   </div>
@@ -82,13 +82,13 @@
         method="POST"
         action="?/createPlan"
         use:enhance
-        onsubmit={handleCreatePlan}
+        onsubmit={handleCreateWorkout}
       >
         <div class="space-y-4 sm:space-y-6">
           <div>
             <label for="name">
               <Typography variant="body" size="md" as="span" color="secondary">
-                Plan Name
+                Workout Name
               </Typography>
             </label>
             <div class="mt-2 sm:mt-3">
@@ -116,7 +116,7 @@
                 name="description"
                 rows={3}
                 bind:value={formDescription}
-                placeholder="Add details about this training plan..."
+                placeholder="Add details about this workout..."
               />
             </div>
           </div>
@@ -128,7 +128,7 @@
               size="md"
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Creating..." : "Create Plan"}
+              {isSubmitting ? "Creating..." : "Create Workout"}
             </Button>
             <Button
               type="button"
@@ -152,7 +152,7 @@
   {#await data.plans}
     <div class="py-8">
       <Typography variant="body" size="md" color="tertiary" as="p">
-        Loading training plans...
+        Loading training workouts...
       </Typography>
     </div>
   {:then plans}
@@ -160,7 +160,7 @@
       {#if plans.length === 0}
         <Card>
           <Typography variant="body" size="md" color="tertiary" as="p">
-            No training plans yet. Create your first plan to get started!
+            No workouts yet. Create your first workout to get started!
           </Typography>
         </Card>
       {:else}

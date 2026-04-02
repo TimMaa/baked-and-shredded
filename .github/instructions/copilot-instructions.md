@@ -2,10 +2,11 @@
 
 ## Project Overview
 Workout Tracker is a personal fitness application built with Svelte 5, SvelteKit, and Tailwind CSS v4. The app allows users to:
-- Create workouts with names and descriptions
+- Create and organize exercises with descriptions and muscle group targets
+- Create workouts by combining exercises with specific rep and weight targets
 - Build training plans and assign workouts to specific days
-- Set target reps and weight for each workout
-- Track actual reps and weight completed during workouts
+- Track actual reps and weight completed during workout sessions
+- View muscle group coverage across workouts
 
 ## Tech Stack
 - **Frontend**: Svelte 5 with SvelteKit and reactive runes ($state, $derived, $effect)
@@ -29,10 +30,19 @@ Workout Tracker is a personal fitness application built with Svelte 5, SvelteKit
 - The @tailwindcss/vite plugin is used for automatic content detection
 
 ### Database (sql.js)
-- Database functions in `src/lib/db.ts` are async and return promises
-- Use `await` when calling database functions
-- Database persists to `data/workout.db` file on the server
-- Schema includes: workouts, training_plans, plan_days, plan_workouts, workout_sessions, session_sets
+
+### File Structure
+### Database (sql.js)
+ - Database functions in `src/lib/db.ts` are async and return promises
+ - Use `await` when calling database functions
+ - Database persists to `data/workout.db` file on the server
+ - Schema includes: exercises, workouts, workout_exercises, training_plans, plan_workouts
+ - Muscle group ratings stored for exercises to enable coverage calculations across workouts
+
+### Database Functions Reference
+ - `getAllExercises()`, `getExercise(id)`, `createExercise()`, `updateExercise()`, `deleteExercise()`
+ - `getAllWorkouts()`, `getWorkout(id)`, `getWorkoutWithExercises()`, `createWorkout()`, `deleteWorkout()`
+ - `getTrainingPlans()`, `createTrainingPlan()`, `deleteTrainingPlan()`, `addWorkoutToDay()`, `removeWorkoutFromDay()`
 
 ### File Structure
 ```
@@ -47,6 +57,100 @@ src/
 │   ├── db.ts               # Database operations
 │   └── components/         # Reusable Svelte components (recommended)
 └── app.css                 # Global styles with Tailwind imports
+```
+```
+src/
+├── routes/           # SvelteKit file-based routing
+│   ├── +layout.svelte      # Main navigation layout
+│   ├── +page.svelte        # Home dashboard with feature cards
+│   ├── exercises/          # Exercise management with muscle group targeting
+│   ├── workouts/           # Workout management
+│   ├── plans/              # Training plan management
+│   │   └── [id]/          # Detailed plan view with exercise details
+│   └── execute/            # Workout execution tracking
+├── lib/
+│   ├── db.ts               # Database operations for all entities
+│   ├── muscleGroups.ts    # Muscle group constants and calculations
+│   ├── designTokens.ts    # Design system tokens
+│   ├── components/        # Reusable Svelte components
+│   │   ├── Button.svelte
+│   │   ├── Card.svelte
+│   │   ├── Input.svelte
+│   │   ├── Typography.svelte
+│   │   ├── MuscleGroupSelector.svelte
+│   │   ├── MuscleGroupCoverage.svelte
+│   │   └── WeekCalendarView.svelte
+│   └── data/              # Static data files (exercises CSV)
+└── app.css                # Global styles with Tailwind imports
+```
+### File Structure
+```
+src/
+├── routes/           # SvelteKit file-based routing
+│   ├── +layout.svelte      # Main navigation layout
+│   ├── +page.svelte        # Home dashboard with feature cards
+│   ├── exercises/          # Exercise management with muscle group targeting
+│   ├── workouts/           # Workout management
+│   ├── plans/              # Training plan management
+│   │   └── [id]/          # Detailed plan view with exercise details
+│   └── execute/            # Workout execution tracking
+├── lib/
+│   ├── db.ts               # Database operations for all entities
+│   ├── muscleGroups.ts    # Muscle group constants and calculations
+│   ├── designTokens.ts    # Design system tokens
+│   ├── components/        # Reusable Svelte components
+│   │   ├── Button.svelte
+│   │   ├── Card.svelte
+│   │   ├── Input.svelte
+│   │   ├── Typography.svelte
+│   │   ├── MuscleGroupSelector.svelte
+│   │   ├── MuscleGroupCoverage.svelte
+│   │   └── WeekCalendarView.svelte
+│   └── data/              # Static data files (exercises CSV)
+├── data/                  # Runtime data directory (workout.db)
+└── app.css                # Global styles with Tailwind imports
+```
+
+## Development Commands
+### Database (sql.js)
+ - Database functions in `src/lib/db.ts` are async and return promises
+ - Use `await` when calling database functions
+ - Database persists to `data/workout.db` file on the server
+ - Schema includes: exercises, workouts, workout_exercises, training_plans, plan_workouts
+ - Muscle group ratings stored for exercises to enable coverage calculations across workouts
+
+### Database Functions Reference
+ - Exercise operations: `getAllExercises()`, `getExercise(id)`, `createExercise()`, `updateExercise()`, `deleteExercise()`
+ - Workout operations: `getAllWorkouts()`, `getWorkout(id)`, `getWorkoutWithExercises()`, `createWorkout()`, `deleteWorkout()`
+ - Plan operations: `getTrainingPlans()`, `createTrainingPlan()`, `deleteTrainingPlan()`, `addWorkoutToDay()`, `removeWorkoutFromDay()`
+
+### File Structure
+```
+src/
+├── routes/           # SvelteKit file-based routing
+│   ├── +layout.svelte      # Main navigation layout
+│   ├── +page.svelte        # Home dashboard with feature cards
+│   ├── exercises/          # Exercise management with muscle group targeting
+│   ├── workouts/           # Workout management
+│   ├── plans/              # Training plan management
+│   │   └── [id]/          # Detailed plan view with exercise details
+│   └── execute/            # Workout execution tracking
+├── lib/
+│   ├── db.ts               # Database operations for all entities
+│   ├── muscleGroups.ts    # Muscle group constants and calculations
+│   ├── designTokens.ts    # Design system tokens
+│   ├── components/        # Reusable Svelte components
+│   │   ├── Button.svelte
+│   │   ├── Card.svelte
+│   │   ├── Input.svelte
+│   │   ├── Typography.svelte
+│   │   ├── MuscleGroupSelector.svelte
+│   │   ├── MuscleGroupCoverage.svelte
+│   │   └── WeekCalendarView.svelte
+│   ├── muscleGroups.ts    # Muscle group definitions
+│   └── data/              # Static data files (exercises CSV)
+├── data/                  # Runtime data directory (workout.db)
+└── app.css                # Global styles with Tailwind imports
 ```
 
 ## Development Commands
@@ -67,29 +171,132 @@ npm run lint     # Run ESLint
 5. **Component Composition**: Prefer component composition and slots over prop drilling
 
 ## Database Operations Example
+6. **Form Actions Implemented**: Exercises and workouts pages already have working form actions for CRUD operations. Use as reference when implementing new forms.
+7. **Muscle Group System**: The `muscleGroups.ts` file defines all available muscle groups. Use `MuscleGroupSelector` and `MuscleGroupCoverage` components for consistent UI.
+8. **Design Theme**: The app follows a "Digital Garden" metaphor with nature-inspired language and values. Keep UX patterns consistent with existing components.
+
+## Form Actions & Server Actions Status
+
+**Currently Implemented:**
+- Exercises page: Full CRUD with `create`, `update`, `delete` actions
+- Plans page: Plan creation and workout assignment actions
+- Plans/[id] page: Detailed workout assignment forms
+
+**Pattern to Follow:**
+```typescript
+// In +page.server.ts
+export const actions = {
+  create: async ({ request }) => {
+    const data = await request.formData();
+    // Process and validate
+    const result = await createItem(/* ... */);
+    return { success: true, message: 'Created successfully' };
+  },
+  delete: async ({ request }) => {
+    // Handle deletion
+    return { success: true };
+  },
+};
+```
+
+## Database Operations Example
 
 ```typescript
 // In +page.server.ts
 export const load = async () => {
   const workouts = await getAllWorkouts();
   return { workouts };
+```
+
+## Next Steps for Feature Completion
+## Performance Considerations
+## Feature Status & Next Steps
+
+
+**Build errors about missing files**: Ensure all files in `src/routes/` are created.
+## Performance Considerations
+ 
+```typescript
+// In +page.server.ts
+export const load = async () => {
+  const exercises = await getAllExercises();
+  const workouts = await getAllWorkouts();
+  return { exercises, workouts };
 };
 
 // In page component
 const { data } = $props();
+let exercises = data.exercises;
 let workouts = data.workouts;
 ```
 
-## Next Steps for Feature Completion
+## Feature Status & Next Steps
 
-- [ ] Implement form actions for workout CRUD operations
-- [ ] Implement training plan day and workout assignment UI
-- [ ] Create detailed plan view (plan/:id page)
-- [ ] Implement full workout execution tracking with rep/weight input
-- [ ] Add workout history and statistics views
-- [ ] Implement data export/import
-- [ ] Add mobile-specific optimizations
-- [ ] Implement offline support with service workers
+- [x] Design system with typography and components
+
+- [ ] Pagination for workout history
+
+## Performance Considerations
+- sql.js runs in-memory; consider lazy loading for very large datasets
+
+## Testing
+- Playwright for E2E tests
+
+## Troubleshooting
+
+**Build errors about missing files**: Ensure all files in `src/routes/` and their corresponding server files are created.
+**Database not persisting**: Check that `data/` directory exists and is writable by the Node process.
+**Page not loading**: Verify `+page.svelte` and `+page.server.ts` files exist in the route directory.
+- The app uses sql.js which runs in-memory; consider lazy loading for very large datasets
+
+## Testing
+- Playwright for E2E tests
+
+## Troubleshooting
+
+**Build errors about missing files**: Ensure all files in `src/routes/` and their corresponding server files are created.
+**Database not persisting**: Check that `data/` directory exists and is writable by the Node process.
+**Page not loading**: Verify `+page.svelte` and `+page.server.ts` files exist in the route directory.
+## Database Operations Example
+
+```typescript
+// In +page.server.ts
+export const load = async () => {
+  const exercises = await getAllExercises();
+  const workouts = await getAllWorkouts();
+  return { exercises, workouts };
+};
+
+// In page component
+const { data } = $props();
+let exercises = data.exercises;
+let workouts = data.workouts;
+```
+
+## Feature Status & Next Steps
+
+### ✅ Completed Features
+- [x] Exercise management (CRUD with muscle group targeting)
+- [x] Workout management (CRUD - combine exercises into workouts)
+- [x] Training plans (Create and view plans with day assignments)
+- [x] Detailed plan view (plans/:id page with full exercise details)
+- [x] Workout execution page (Select and start workout sessions)
+- [x] Muscle group coverage visualization (MuscleGroupCoverage component)
+- [x] Form actions for exercises (create, update, delete)
+- [x] Form actions for workout/plan operations
+- [x] Mobile-responsive design (Tailwind CSS v4)
+- [x] Design system with typography and components
+
+### 🚀 In Progress / To Do
+- [ ] Complete workout execution tracking (submit completed reps/weight for each set)
+- [ ] Persist workout session data to database
+- [ ] Workout history and session logs
+- [ ] Statistics and analytics views (volume, frequency by muscle group)
+- [ ] Data export/import functionality
+- [ ] Offline support with service workers
+- [ ] Unit and E2E tests (no test framework configured yet)
+- [ ] Performance optimizations for large datasets
+- [ ] Pagination for workout history
 
 ## Performance Considerations
 
@@ -97,6 +304,7 @@ let workouts = data.workouts;
 - Implement proper loading states on forms
 - Consider pagination for large workout histories
 - Use SvelteKit's `invalidate()` for cache management
+- sql.js runs in-memory; consider lazy loading for very large datasets
 
 ## Testing
 Currently no test framework configured. Consider adding:
@@ -105,6 +313,9 @@ Currently no test framework configured. Consider adding:
 
 ## Troubleshooting
 
-**Build errors about missing files**: Ensure all files in `src/routes/` are created.
-**Database not persisting**: Check that `data/` directory exists and is writable.
+**Build errors about missing files**: Ensure all files in `src/routes/` and their corresponding server files are created.
+**Database not persisting**: Check that `data/` directory exists and is writable by the Node process.
 **Page not loading**: Verify `+page.svelte` and `+page.server.ts` files exist in the route directory.
+**Muscle groups not showing**: Verify `muscleGroups.ts` is imported and the component uses `MuscleGroupSelector` or `MuscleGroupCoverage`.
+**Muscle groups not showing**: Verify `muscleGroups.ts` is imported and the component uses `MuscleGroupSelector` or `MuscleGroupCoverage`.
+**Muscle groups not showing**: Verify `muscleGroups.ts` is imported and the component uses `MuscleGroupSelector` or `MuscleGroupCoverage`.

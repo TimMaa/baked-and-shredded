@@ -44,24 +44,24 @@
   </div>
 
   {#if !sessionStarted}
-    {#await data.plans}
+    {#await data.workouts}
       <div>Loading...</div>
-    {:then plans}
+    {:then workouts}
       <div class="space-y-4 sm:space-y-6">
         <Card>
           <Typography variant="headline" size="md" as="h2" color="primary">
             Select Training Plan
           </Typography>
-          {#if plans.length === 0}
+          {#if workouts.length === 0}
             <Typography variant="body" size="md" color="tertiary" as="p">
-              No training plans available. <a
+              No training workouts available. <a
                 href="/plans"
                 class="text-primary hover:text-tertiary">Create one first</a
               >
             </Typography>
           {:else}
             <div class="space-y-2 sm:space-y-3">
-              {#each plans as plan (plan.id)}
+              {#each workouts as plan (plan.id)}
                 <label
                   class="flex items-start p-3 sm:p-4 rounded-lg cursor-pointer transition-all"
                   class:selected={selectedPlan === plan.id}

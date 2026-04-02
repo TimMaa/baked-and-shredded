@@ -14,15 +14,15 @@
   </section>
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
-    <a href="/workouts" class="no-underline">
+    <a href="/exercises" class="no-underline">
       <Card hoverable>
         <div class="space-y-4">
           <div class="text-5xl">💪</div>
           <Typography variant="headline" size="md" as="h2" color="primary">
-            Manage Workouts
+            Manage Exercises
           </Typography>
           <Typography variant="body" size="sm" color="default" as="p">
-            Create and organize your exercises with descriptions and sets
+            Create and organize your exercises with descriptions and muscle targets
           </Typography>
         </div>
       </Card>
@@ -33,10 +33,10 @@
         <div class="space-y-4">
           <div class="text-5xl">📋</div>
           <Typography variant="headline" size="md" as="h2" color="secondary">
-            Training Plans
+            Build Workouts
           </Typography>
           <Typography variant="body" size="sm" color="default" as="p">
-            Build weekly programs and structure your workouts by day
+            Combine exercises into weekly programs and structure your training by day
           </Typography>
         </div>
       </Card>

@@ -1,6 +1,12 @@
 <script lang="ts">
   import Typography from "./Typography.svelte";
-  import { createDefaultMuscleRatings, normalizeMuscleRatings, type MuscleRatings } from "$lib/muscleGroups";
+  import {
+    createDefaultMuscleRatings,
+    getMuscleGroupLabel,
+    MUSCLE_GROUP_CATEGORIES,
+    normalizeMuscleRatings,
+    type MuscleRatings,
+  } from "$lib/muscleGroups";
 
   interface Props {
     focusAreas?: string[];
@@ -10,24 +16,7 @@
 
   let { focusAreas = [], muscleRatings, compact = false }: Props = $props();
 
-  const muscleGroups = {
-    "Upper Body": [
-      "Chest (Pectorals)",
-      "Back (Lats, Rhomboids, Traps)",
-      "Shoulders (Deltoids)",
-      "Biceps",
-      "Triceps",
-      "Forearms",
-    ],
-    "Core": ["Abs (Core/Obliques)", "Lower Back (Erector Spinae)"],
-    "Lower Body": [
-      "Glutes (Gluteus Maximus/Medius)",
-      "Quads (Quadriceps)",
-      "Hamstrings",
-      "Calves",
-      "Adductors/Abductors (Inner/Outer Thigh)",
-    ],
-  };
+  const muscleGroups = MUSCLE_GROUP_CATEGORIES;
 
   const normalizedRatings = $derived.by(() => {
     if (muscleRatings) {
@@ -60,7 +49,7 @@
     for (const [category, groups] of Object.entries(muscleGroups)) {
       const points = groups.reduce((sum, group) => sum + (normalizedRatings[group] ?? 0), 0);
       const maxPoints = groups.length * 5;
-      const percentage = Math.round((points / maxPoints) * 100);
+      const percentage = maxPoints > 0 ? Math.min(100, Math.round((points / maxPoints) * 100)) : 0;
       stats[category] = { points, maxPoints, percentage };
     }
 
@@ -75,7 +64,7 @@
       <div class="flex flex-wrap gap-2">
         {#each ratedMuscles.slice(0, 5) as [area, rating]}
           <span class="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-900 rounded-full">
-            {area.split('(')[0].trim()} ({rating})
+            {getMuscleGroupLabel(area)} ({rating})
           </span>
         {/each}
         {#if ratedMuscles.length > 5}
@@ -124,7 +113,7 @@
         <div class="flex flex-wrap gap-2">
           {#each ratedMuscles as [area, rating]}
             <span class="inline-block px-2.5 py-1 text-xs font-medium bg-blue-100 text-blue-900 rounded-full">
-              {area} ({rating})
+              {getMuscleGroupLabel(area)} ({rating})
             </span>
           {/each}
         </div>
