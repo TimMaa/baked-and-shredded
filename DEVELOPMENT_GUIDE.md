@@ -29,20 +29,21 @@ workout-tracker/
 │   ├── routes/
 │   │   ├── +layout.svelte          # Global layout template
 │   │   ├── +page.svelte            # Home page
-│   │   ├── workouts/
-│   │   │   ├── +page.svelte        # Workout list page
-│   │   │   └── +page.server.ts     # Workout data loading & actions
+│   │   ├── exercises/
+│   │   │   └── +page.svelte        # Exercise management
 │   │   ├── plans/
 │   │   │   ├── +page.svelte        # Plan list page
-│   │   │   ├── +page.server.ts     # Plan data loading & actions
 │   │   │   └── [id]/
 │   │   │       ├── +page.svelte    # Single plan detail
-│   │   │       └── +page.server.ts
 │   │   └── execute/
 │   │       ├── +page.svelte        # Workout execution
-│   │       └── +page.server.ts     # Session management
+│   │       └── session/             # Session-specific UI state
 │   └── lib/
-│       ├── db.ts                    # Database operations
+│       ├── data/
+│       │   ├── sqlite.ts            # Database runtime + query helpers
+│       │   ├── exercises.ts         # Exercise data access
+│       │   ├── workouts.ts          # Workout data access
+│       │   └── sessions.ts          # Session + analytics data access
 │       ├── designTokens.ts          # Design system TypeScript exports
 │       └── components/
 │           ├── Button.svelte        # Reusable button
@@ -58,13 +59,11 @@ workout-tracker/
 
 ### Adding a New Feature
 
-1. **Create the database function** (if needed)
+1. **Create the data function** (if needed)
    ```typescript
-   // In src/lib/db.ts
+   // In src/lib/data/workouts.ts (or exercises.ts / sessions.ts)
    export async function getMyData() {
-     await initDb();
-     const result = db.exec(`SELECT * FROM my_table`);
-     return result;
+     return queryRows('SELECT * FROM my_table');
    }
    ```
 
@@ -72,18 +71,18 @@ workout-tracker/
    ```bash
    mkdir -p src/routes/myfeature
    touch src/routes/myfeature/+page.svelte
-   touch src/routes/myfeature/+page.server.ts
    ```
 
-3. **Load data server-side**
+3. **Load data client-side**
    ```typescript
-   // src/routes/myfeature/+page.server.ts
-   import { getMyData } from '$lib/db';
+   // src/routes/myfeature/+page.svelte
+   import { onMount } from 'svelte';
+   import { getMyData } from '$lib/data/workouts';
 
-   export const load = async () => {
-     const data = await getMyData();
-     return { data };
-   };
+   let data = $state([]);
+   onMount(async () => {
+     data = await getMyData();
+   });
    ```
 
 4. **Build the UI with components**
@@ -223,19 +222,18 @@ export const actions = {
 All database functions are **async** - always use `await`:
 
 ```typescript
-// Import from db.ts
+// Import from local data modules
 import {
-  createWorkout,
-  getAllWorkouts,
-  updateWorkout,
-  deleteWorkout
-} from '$lib/db';
+  createWorkoutLocal,
+  getAllWorkoutsLocal,
+  updateWorkoutLocal,
+  deleteWorkoutLocal
+} from '$lib/data/workouts';
 
-// In load functions or server actions
-const workouts = await getAllWorkouts();
-await createWorkout({ name: 'Bench Press', description: '...' });
-await updateWorkout(id, { name: 'New Name' });
-await deleteWorkout(id);
+const workouts = await getAllWorkoutsLocal();
+await createWorkoutLocal('Bench Press', 'Upper chest');
+await updateWorkoutLocal(id, 'New Name', 'Description');
+await deleteWorkoutLocal(id);
 ```
 
 ## Styling Guidelines

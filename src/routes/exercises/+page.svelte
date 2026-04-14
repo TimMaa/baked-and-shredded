@@ -1,30 +1,88 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+  import { onMount } from 'svelte';
   import Button from "$lib/components/Button.svelte";
   import Card from "$lib/components/Card.svelte";
   import Typography from "$lib/components/Typography.svelte";
   import Input from "$lib/components/Input.svelte";
   import MuscleGroupSelector from "$lib/components/MuscleGroupSelector.svelte";
   import MuscleGroupCoverage from "$lib/components/MuscleGroupCoverage.svelte";
+  import {
+    createExerciseLocal,
+    deleteExerciseLocal,
+    getAllExercisesLocal,
+    importExercisesFromCsv,
+    updateExerciseLocal,
+    type ExerciseRecord,
+  } from '$lib/data/exercises';
+  import { getDatabaseRuntimeStatus } from '$lib/data/sqlite';
   import { createDefaultMuscleRatings, totalMusclePoints, type MuscleRatings } from "$lib/muscleGroups";
-  import type { PageData, ActionData } from "./$types";
-
-  let { data, form }: { data: PageData; form?: ActionData } = $props();
 
   let showForm = $state(false);
   let formName = $state("");
   let formDescription = $state("");
   let formTip = $state("");
   let formMuscleRatings = $state<MuscleRatings>(createDefaultMuscleRatings());
+  let exercises = $state<ExerciseRecord[]>([]);
+  let csvFile = $state<File | null>(null);
   let isSubmitting = $state(false);
+  let isImporting = $state(false);
+  let isLoading = $state(true);
   let editingId = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
   let successMessage = $state<string | null>(null);
+  const databaseStatus = getDatabaseRuntimeStatus();
+  const isNativePlatform = databaseStatus.isNativePlatform;
 
-  const handleAddExercise = async (e: Event) => {
+  function resetFormState() {
+    formName = "";
+    formDescription = "";
+    formTip = "";
+    formMuscleRatings = createDefaultMuscleRatings();
+    editingId = null;
+    showForm = false;
+  }
+
+  async function loadExercises() {
+    if (!isNativePlatform) {
+      isLoading = false;
+      return;
+    }
+
+    isLoading = true;
+    try {
+      exercises = await getAllExercisesLocal();
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Failed to load exercises';
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  onMount(async () => {
+    await loadExercises();
+  });
+
+  const handleAddExercise = async (event: SubmitEvent) => {
+    event.preventDefault();
     isSubmitting = true;
     errorMessage = null;
     successMessage = null;
+
+    try {
+      await createExerciseLocal({
+        name: formName,
+        description: formDescription,
+        tip: formTip,
+        focusAreas: formMuscleRatings,
+      });
+      await loadExercises();
+      successMessage = 'Exercise created successfully';
+      resetFormState();
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Failed to create exercise';
+    } finally {
+      isSubmitting = false;
+    }
   };
 
   const handleEditClick = (
@@ -40,46 +98,91 @@
     formTip = tip || "";
     formMuscleRatings = focusAreas || createDefaultMuscleRatings();
     errorMessage = null;
+    successMessage = null;
   };
 
-  const handleSaveEdit = async (e: Event) => {
+  const handleSaveEdit = async (event: SubmitEvent) => {
+    event.preventDefault();
     isSubmitting = true;
     errorMessage = null;
+
+    try {
+      await updateExerciseLocal({
+        id: editingId ?? undefined,
+        name: formName,
+        description: formDescription,
+        tip: formTip,
+        focusAreas: formMuscleRatings,
+      });
+      await loadExercises();
+      successMessage = 'Exercise updated successfully';
+      resetFormState();
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Failed to update exercise';
+    } finally {
+      isSubmitting = false;
+    }
   };
 
   const handleCancelEdit = () => {
-    editingId = null;
-    formName = "";
-    formDescription = "";
-    formTip = "";
-    formMuscleRatings = createDefaultMuscleRatings();
+    resetFormState();
     errorMessage = null;
   };
 
-  const handleDeleteClick = (id: number, name: string) => {
-    if (confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
-      // The delete form will be submitted
+  const handleDeleteClick = async (id: number, name: string) => {
+    if (!confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    isSubmitting = true;
+    errorMessage = null;
+    successMessage = null;
+
+    try {
+      await deleteExerciseLocal(id);
+      await loadExercises();
+      successMessage = 'Exercise deleted successfully';
+      if (editingId === id) {
+        resetFormState();
+      }
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Failed to delete exercise';
+    } finally {
+      isSubmitting = false;
     }
   };
 
-  $effect(() => {
-    if (form?.success) {
-      successMessage = form.message || "Operation completed successfully";
-      formName = "";
-      formDescription = "";
-      formTip = "";
-      formMuscleRatings = createDefaultMuscleRatings();
-      showForm = false;
-      editingId = null;
-      isSubmitting = false;
-      setTimeout(() => {
-        successMessage = null;
-      }, 3000);
-    } else if (form?.message) {
-      errorMessage = form.message;
-      isSubmitting = false;
+  async function handleImportSubmit(event: SubmitEvent) {
+    event.preventDefault();
+
+    if (!csvFile) {
+      errorMessage = 'Please select a CSV file';
+      return;
     }
-  });
+
+    isImporting = true;
+    errorMessage = null;
+    successMessage = null;
+
+    try {
+      const result = await importExercisesFromCsv(csvFile);
+      await loadExercises();
+      csvFile = null;
+      successMessage = `Imported ${result.imported} exercises${result.skipped ? `, skipped ${result.skipped}` : ''}.`;
+      if (result.skippedDetails.length > 0) {
+        errorMessage = result.skippedDetails.slice(0, 3).join(' ');
+      }
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Failed to import exercises';
+    } finally {
+      isImporting = false;
+    }
+  }
+
+  function handleCsvFileChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    csvFile = input.files?.[0] ?? null;
+  }
 </script>
 
 <div class="space-y-6 sm:space-y-8">
@@ -131,31 +234,34 @@
         Example header: exercise,description,tip,Chest,Back,Shoulders,Biceps,Triceps,Forearms,Abs,Lower_Back,Glutes,Quads,Hamstrings,Calves,Adductors_Abductors
       </Typography>
 
-      <form method="POST" action="?/importCsv" enctype="multipart/form-data" use:enhance>
+      <form onsubmit={handleImportSubmit} enctype="multipart/form-data">
         <div class="flex flex-col sm:flex-row gap-3 sm:items-center">
           <input
             type="file"
-            name="csvFile"
             accept=".csv,text/csv"
             required
+            oninput={handleCsvFileChange}
             class="block w-full text-sm text-tertiary file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-primary-container file:text-on-primary hover:file:opacity-90"
           />
-          <Button type="submit" variant="secondary" size="md">
-            Import CSV
+          <Button type="submit" variant="secondary" size="md" disabled={isImporting || !isNativePlatform}>
+            {isImporting ? 'Importing...' : 'Import CSV'}
           </Button>
         </div>
       </form>
     </div>
   </Card>
 
+  {#if !isNativePlatform}
+    <Card>
+      <Typography variant="body" size="md" color="tertiary" as="p">
+        Exercise management is available in the Android app runtime. The current browser preview keeps building, but local SQLite CRUD is native-only.
+      </Typography>
+    </Card>
+  {/if}
+
   {#if showForm && !editingId}
     <Card>
-      <form
-        method="POST"
-        action="?/addExercise"
-        use:enhance
-        onsubmit={handleAddExercise}
-      >
+      <form onsubmit={handleAddExercise}>
         <div class="space-y-4 sm:space-y-6">
           <div>
             <label for="name">
@@ -225,7 +331,6 @@
             <div class="mt-2 sm:mt-3">
               <MuscleGroupSelector bind:selected={formMuscleRatings} required maxPoints={25} />
             </div>
-            <input type="hidden" name="muscleRatings" value={JSON.stringify(formMuscleRatings)} />
             <div class="mt-2">
               <Typography variant="body" size="sm" color="tertiary" as="p">
                 Total points: {totalMusclePoints(formMuscleRatings)}/25
@@ -247,11 +352,7 @@
               variant="tertiary"
               size="md"
               onclick={() => {
-                showForm = false;
-                formName = "";
-                formDescription = "";
-                formTip = "";
-                formMuscleRatings = createDefaultMuscleRatings();
+                resetFormState();
                 errorMessage = null;
               }}
             >
@@ -264,9 +365,9 @@
   {/if}
 
   <div class="space-y-3 sm:space-y-4">
-    {#await data.exercises}
+    {#if isLoading}
       <div>Loading...</div>
-    {:then exercises}
+    {:else}
       {#if exercises.length === 0}
         <Card>
           <Typography
@@ -282,13 +383,7 @@
         {#each exercises as exercise (exercise.id)}
           {#if editingId === exercise.id}
             <Card>
-              <form
-                method="POST"
-                action="?/editExercise"
-                use:enhance
-                onsubmit={handleSaveEdit}
-              >
-                <input type="hidden" name="id" value={exercise.id} />
+              <form onsubmit={handleSaveEdit}>
                 <div class="space-y-4 sm:space-y-6">
                   <div>
                     <label for="edit-name">
@@ -358,7 +453,6 @@
                     <div class="mt-2 sm:mt-3">
                       <MuscleGroupSelector bind:selected={formMuscleRatings} required maxPoints={25} />
                     </div>
-                    <input type="hidden" name="muscleRatings" value={JSON.stringify(formMuscleRatings)} />
                     <div class="mt-2">
                       <Typography variant="body" size="sm" color="tertiary" as="p">
                         Total points: {totalMusclePoints(formMuscleRatings)}/25
@@ -428,27 +522,20 @@
                   >
                     Edit
                   </Button>
-                  <form method="POST" action="?/deleteExercise" style="display: contents;">
-                    <input type="hidden" name="id" value={exercise.id} />
-                    <Button
-                      type="submit"
-                      variant="tertiary"
-                      size="sm"
-                      onclick={() => {
-                        if (!confirm(`Are you sure you want to delete "${exercise.name}"? This action cannot be undone.`)) {
-                          event?.preventDefault();
-                        }
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </form>
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    size="sm"
+                    onclick={() => handleDeleteClick(exercise.id, exercise.name)}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </div>
             </Card>
           {/if}
         {/each}
       {/if}
-    {/await}
+    {/if}
   </div>
 </div>

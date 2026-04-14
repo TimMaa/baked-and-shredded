@@ -14,7 +14,7 @@ A personal workout tracking application built with Svelte 5, SvelteKit, and Tail
 
 - **Frontend**: Svelte 5 with SvelteKit
 - **Styling**: Tailwind CSS v4
-- **Database**: SQLite with better-sqlite3
+- **Database**: Capacitor SQLite (`@capacitor-community/sqlite`) for native Android offline storage
 - **Build Tool**: Vite
 - **Language**: TypeScript
 
@@ -29,7 +29,11 @@ src/
 │   ├── plans/             # Training plan management
 │   └── execute/           # Workout execution tracking
 ├── lib/
-│   ├── db.ts              # Database operations and schema
+│   ├── data/
+│   │   ├── sqlite.ts      # SQLite connection and query helpers
+│   │   ├── exercises.ts   # Exercise data operations
+│   │   ├── workouts.ts    # Workout data operations
+│   │   └── sessions.ts    # Session + analytics operations
 │   └── components/        # Reusable components
 └── app.css                # Global styles with Tailwind
 ```
@@ -83,10 +87,9 @@ In **Execute**, select your training plan and the day you want to work out. The 
 
 The application uses SQLite with the following main tables:
 
-- `workouts` - Your available exercises
-- `training_plans` - Your weekly training programs
-- `plan_days` - Days within a training plan
-- `plan_workouts` - Exercises assigned to plan days with targets
+- `exercises` - Exercise catalog and muscle-group focus ratings
+- `workouts` - Workout plan metadata
+- `workout_exercises` - Exercises assigned to workouts with targets
 - `workout_sessions` - Individual workout sessions
 - `session_sets` - Logged reps and weight during sessions
 
@@ -111,7 +114,7 @@ Tailwind v4 configuration is CSS-first:
 ### Adding New Pages
 
 1. Create a new directory in `src/routes/` (e.g., `src/routes/reports/`)
-2. Create `+page.svelte` for the page and `+page.server.ts` for server logic
+2. Create `+page.svelte` for the page and call local data modules under `src/lib/data`
 3. Add navigation link in `src/routes/+layout.svelte`
 
 ## Next Steps

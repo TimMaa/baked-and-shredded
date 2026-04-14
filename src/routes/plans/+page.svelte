@@ -1,40 +1,120 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+  import { onMount } from "svelte";
   import Button from "$lib/components/Button.svelte";
   import Card from "$lib/components/Card.svelte";
   import Typography from "$lib/components/Typography.svelte";
   import Input from "$lib/components/Input.svelte";
   import MuscleGroupCoverage from "$lib/components/MuscleGroupCoverage.svelte";
-  import type { PageData, ActionData } from "./$types";
+  import {
+    createWorkoutLocal,
+    deleteWorkoutLocal,
+    getAllWorkoutsLocal,
+    getWorkoutWithExercisesLocal,
+    type WorkoutRecord,
+  } from "$lib/data/workouts";
+  import {
+    createDefaultMuscleRatings,
+    normalizeMuscleRatings,
+    type MuscleRatings,
+  } from "$lib/muscleGroups";
 
-  let { data, form }: { data: PageData; form?: ActionData } = $props();
+  type WorkoutListItem = WorkoutRecord & {
+    exerciseCount: number;
+    focusAreaRatings: MuscleRatings;
+  };
 
   let showForm = $state(false);
   let formName = $state("");
   let formDescription = $state("");
   let isSubmitting = $state(false);
+  let isLoading = $state(true);
   let errorMessage = $state<string | null>(null);
   let successMessage = $state<string | null>(null);
+  let plans = $state<WorkoutListItem[]>([]);
 
-  const handleCreateWorkout = async (e: Event) => {
+  async function loadPlans() {
+    isLoading = true;
+    const workouts = await getAllWorkoutsLocal();
+
+    plans = await Promise.all(
+      workouts.map(async (workout) => {
+        const workoutWithExercises = await getWorkoutWithExercisesLocal(workout.id);
+        const focusAreaRatings = createDefaultMuscleRatings();
+
+        if (workoutWithExercises?.exercises && Array.isArray(workoutWithExercises.exercises)) {
+          for (const exercise of workoutWithExercises.exercises) {
+            if (exercise.focus_areas && typeof exercise.focus_areas === "object") {
+              const normalized = normalizeMuscleRatings(exercise.focus_areas);
+              for (const [group, rating] of Object.entries(normalized)) {
+                focusAreaRatings[group] = (focusAreaRatings[group] ?? 0) + Number(rating || 0);
+              }
+            }
+          }
+        }
+
+        return {
+          ...workout,
+          exerciseCount: workoutWithExercises?.exercises?.length || 0,
+          focusAreaRatings,
+        };
+      })
+    );
+
+    isLoading = false;
+  }
+
+  async function handleCreateWorkout(event: SubmitEvent) {
+    event.preventDefault();
     isSubmitting = true;
     errorMessage = null;
     successMessage = null;
-  };
 
-  $effect(() => {
-    if (form?.success) {
+    try {
+      await createWorkoutLocal(formName, formDescription);
+      await loadPlans();
       successMessage = "Workout created successfully";
       formName = "";
       formDescription = "";
       showForm = false;
-      isSubmitting = false;
       setTimeout(() => {
         successMessage = null;
       }, 3000);
-    } else if (form?.message) {
-      errorMessage = form.message;
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : "Failed to create workout";
+    } finally {
       isSubmitting = false;
+    }
+  }
+
+  async function handleDeleteWorkout(planId: number, planName: string) {
+    if (!confirm(`Are you sure you want to delete "${planName}"?`)) {
+      return;
+    }
+
+    isSubmitting = true;
+    errorMessage = null;
+    successMessage = null;
+
+    try {
+      await deleteWorkoutLocal(planId);
+      await loadPlans();
+      successMessage = "Workout deleted successfully";
+      setTimeout(() => {
+        successMessage = null;
+      }, 3000);
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : "Failed to delete workout";
+    } finally {
+      isSubmitting = false;
+    }
+  }
+
+  onMount(async () => {
+    try {
+      await loadPlans();
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : "Failed to load workouts";
+      isLoading = false;
     }
   });
 </script>
@@ -78,12 +158,7 @@
 
   {#if showForm}
     <Card>
-      <form
-        method="POST"
-        action="?/createPlan"
-        use:enhance
-        onsubmit={handleCreateWorkout}
-      >
+      <form onsubmit={handleCreateWorkout}>
         <div class="space-y-4 sm:space-y-6">
           <div>
             <label for="name">
@@ -149,13 +224,13 @@
     </Card>
   {/if}
 
-  {#await data.plans}
+  {#if isLoading}
     <div class="py-8">
       <Typography variant="body" size="md" color="tertiary" as="p">
         Loading training workouts...
       </Typography>
     </div>
-  {:then plans}
+  {:else}
     <div class="space-y-3 sm:space-y-4">
       {#if plans.length === 0}
         <Card>
@@ -203,28 +278,22 @@
                     Edit
                   </Button>
                 </a>
-                <form method="POST" action="?/deletePlan" style="display: contents;">
-                  <input type="hidden" name="id" value={plan.id} />
-                  <Button
-                    type="submit"
-                    variant="tertiary"
-                    size="sm"
-                    onclick={() => {
-                      if (!confirm(`Are you sure you want to delete "${plan.name}"?`)) {
-                        event?.preventDefault();
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </form>
+                <Button
+                  type="button"
+                  variant="tertiary"
+                  size="sm"
+                  disabled={isSubmitting}
+                  onclick={() => handleDeleteWorkout(plan.id, plan.name)}
+                >
+                  Delete
+                </Button>
               </div>
             </div>
           </Card>
         {/each}
       {/if}
     </div>
-  {/await}
+  {/if}
 </div>
 
 <style>

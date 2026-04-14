@@ -232,11 +232,11 @@ import Input from '$lib/components/Input.svelte';
 ### Database
 ```typescript
 import {
-  getAllWorkouts,
-  createWorkout,
-  updateWorkout,
-  deleteWorkout
-} from '$lib/db';
+  getAllWorkoutsLocal,
+  createWorkoutLocal,
+  updateWorkoutLocal,
+  deleteWorkoutLocal
+} from '$lib/data/workouts';
 ```
 
 ### Design Tokens
@@ -284,24 +284,19 @@ $effect(() => {
 
 ```typescript
 // Get all
-const workouts = await getAllWorkouts();
+const workouts = await getAllWorkoutsLocal();
 
 // Create
-await createWorkout({
-  name: 'Bench Press',
-  description: 'Upper chest'
-});
+await createWorkoutLocal('Bench Press', 'Upper chest');
 
 // Update
-await updateWorkout(id, {
-  name: 'Updated name'
-});
+await updateWorkoutLocal(id, 'Updated name', 'Upper chest');
 
 // Delete
-await deleteWorkout(id);
+await deleteWorkoutLocal(id);
 
 // Get one
-const workout = await getWorkout(id);
+const workout = await getWorkoutLocal(id);
 ```
 
 ## Server Actions
@@ -316,14 +311,14 @@ export const actions = {
     if (!name) return { error: 'Name required' };
 
     // Save
-    await createWorkout({ name, description: data.get('description') });
+    await createWorkoutLocal(String(name), String(data.get('description') ?? ''));
 
     return { success: true };
   },
 
   async delete({ request }) {
     const id = await request.formData().get('id');
-    await deleteWorkout(id);
+    await deleteWorkoutLocal(Number(id));
     return { success: true };
   }
 };
@@ -345,12 +340,13 @@ CTRL+SHIFT+I    Open DevTools alternate
 | What | Where |
 |------|-------|
 | Pages | `src/routes/*/+page.svelte` |
-| Data Loading | `src/routes/*/+page.server.ts` |
+| Data Loading | `src/lib/data/*.ts` |
 | Components | `src/lib/components/*.svelte` |
 | Design System | `src/app.css` |
 | Design Tokens | `src/lib/designTokens.ts` |
-| Database | `src/lib/db.ts` |
-| Built Database | `data/workout.db` |
+| Database Runtime | `src/lib/data/sqlite.ts` |
+| Database Modules | `src/lib/data/*.ts` |
+| Native Database | Capacitor SQLite (Android app runtime) |
 
 ## Commands
 

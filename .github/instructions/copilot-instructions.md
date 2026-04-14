@@ -11,7 +11,7 @@ Workout Tracker is a personal fitness application built with Svelte 5, SvelteKit
 ## Tech Stack
 - **Frontend**: Svelte 5 with SvelteKit and reactive runes ($state, $derived, $effect)
 - **Styling**: Tailwind CSS v4 with @tailwindcss/vite plugin
-- **Database**: sql.js (JavaScript-based SQLite, no native compilation needed)
+- **Database**: Capacitor SQLite via local data modules in `src/lib/data/*`
 - **Build**: Vite v8.0.0
 - **Language**: TypeScript
 
@@ -29,20 +29,20 @@ Workout Tracker is a personal fitness application built with Svelte 5, SvelteKit
 - Configuration is CSS-first (see app.css) - no tailwind.config.js needed
 - The @tailwindcss/vite plugin is used for automatic content detection
 
-### Database (sql.js)
+### Database (local SQLite modules)
 
 ### File Structure
-### Database (sql.js)
- - Database functions in `src/lib/db.ts` are async and return promises
- - Use `await` when calling database functions
- - Database persists to `data/workout.db` file on the server
- - Schema includes: exercises, workouts, workout_exercises, training_plans, plan_workouts
- - Muscle group ratings stored for exercises to enable coverage calculations across workouts
+### Database (local SQLite modules)
+ - Data functions in `src/lib/data/*.ts` are async and return promises
+ - Use `await` when calling data functions
+ - Local storage is managed through Capacitor SQLite (`src/lib/data/sqlite.ts`)
+ - Schema includes: exercises, workouts, workout_exercises, workout_sessions, session_sets
+ - Muscle group ratings are stored in `focus_areas` for coverage calculations
 
 ### Database Functions Reference
- - `getAllExercises()`, `getExercise(id)`, `createExercise()`, `updateExercise()`, `deleteExercise()`
- - `getAllWorkouts()`, `getWorkout(id)`, `getWorkoutWithExercises()`, `createWorkout()`, `deleteWorkout()`
- - `getTrainingPlans()`, `createTrainingPlan()`, `deleteTrainingPlan()`, `addWorkoutToDay()`, `removeWorkoutFromDay()`
+ - Exercises: `getAllExercisesLocal()`, `createExerciseLocal()`, `updateExerciseLocal()`, `deleteExerciseLocal()`
+ - Workouts: `getAllWorkoutsLocal()`, `getWorkoutLocal()`, `getWorkoutWithExercisesLocal()`, `createWorkoutLocal()`, `updateWorkoutLocal()`, `deleteWorkoutLocal()`
+ - Sessions: `createWorkoutSessionLocal()`, `logSessionSetLocal()`, `completeWorkoutSessionLocal()`, `getWorkoutSessionHistoryLocal()`
 
 ### File Structure
 ```
@@ -54,7 +54,7 @@ src/
 │   ├── plans/              # Training plan management
 │   └── execute/            # Workout execution tracking
 ├── lib/
-│   ├── db.ts               # Database operations
+│   ├── data/               # Local SQLite data modules
 │   └── components/         # Reusable Svelte components (recommended)
 └── app.css                 # Global styles with Tailwind imports
 ```
@@ -69,7 +69,7 @@ src/
 │   │   └── [id]/          # Detailed plan view with exercise details
 │   └── execute/            # Workout execution tracking
 ├── lib/
-│   ├── db.ts               # Database operations for all entities
+│   ├── data/               # Local SQLite data modules for all entities
 │   ├── muscleGroups.ts    # Muscle group constants and calculations
 │   ├── designTokens.ts    # Design system tokens
 │   ├── components/        # Reusable Svelte components
@@ -95,7 +95,7 @@ src/
 │   │   └── [id]/          # Detailed plan view with exercise details
 │   └── execute/            # Workout execution tracking
 ├── lib/
-│   ├── db.ts               # Database operations for all entities
+│   ├── data/               # Local SQLite data modules for all entities
 │   ├── muscleGroups.ts    # Muscle group constants and calculations
 │   ├── designTokens.ts    # Design system tokens
 │   ├── components/        # Reusable Svelte components
@@ -112,17 +112,17 @@ src/
 ```
 
 ## Development Commands
-### Database (sql.js)
- - Database functions in `src/lib/db.ts` are async and return promises
- - Use `await` when calling database functions
- - Database persists to `data/workout.db` file on the server
- - Schema includes: exercises, workouts, workout_exercises, training_plans, plan_workouts
- - Muscle group ratings stored for exercises to enable coverage calculations across workouts
+### Database (local SQLite modules)
+ - Data functions in `src/lib/data/*.ts` are async and return promises
+ - Use `await` when calling data functions
+ - Local storage is managed through Capacitor SQLite (`src/lib/data/sqlite.ts`)
+ - Schema includes: exercises, workouts, workout_exercises, workout_sessions, session_sets
+ - Muscle group ratings are stored in `focus_areas` for coverage calculations
 
 ### Database Functions Reference
- - Exercise operations: `getAllExercises()`, `getExercise(id)`, `createExercise()`, `updateExercise()`, `deleteExercise()`
- - Workout operations: `getAllWorkouts()`, `getWorkout(id)`, `getWorkoutWithExercises()`, `createWorkout()`, `deleteWorkout()`
- - Plan operations: `getTrainingPlans()`, `createTrainingPlan()`, `deleteTrainingPlan()`, `addWorkoutToDay()`, `removeWorkoutFromDay()`
+ - Exercise operations: `getAllExercisesLocal()`, `createExerciseLocal()`, `updateExerciseLocal()`, `deleteExerciseLocal()`
+ - Workout operations: `getAllWorkoutsLocal()`, `getWorkoutLocal()`, `getWorkoutWithExercisesLocal()`, `createWorkoutLocal()`, `updateWorkoutLocal()`, `deleteWorkoutLocal()`
+ - Session operations: `createWorkoutSessionLocal()`, `logSessionSetLocal()`, `completeWorkoutSessionLocal()`, `getWorkoutSessionHistoryLocal()`
 
 ### File Structure
 ```
@@ -136,7 +136,7 @@ src/
 │   │   └── [id]/          # Detailed plan view with exercise details
 │   └── execute/            # Workout execution tracking
 ├── lib/
-│   ├── db.ts               # Database operations for all entities
+│   ├── data/               # Local SQLite data modules for all entities
 │   ├── muscleGroups.ts    # Muscle group constants and calculations
 │   ├── designTokens.ts    # Design system tokens
 │   ├── components/        # Reusable Svelte components

@@ -1,22 +1,87 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import Card from "$lib/components/Card.svelte";
   import Typography from "$lib/components/Typography.svelte";
   import Button from "$lib/components/Button.svelte";
-  import type { PageData } from "./$types";
+  import {
+    deleteWorkoutSessionLocal,
+    getExerciseDeviationAnalyticsLocal,
+    getWorkoutAggregateAnalyticsLocal,
+    getWorkoutSessionHistoryLocal,
+    type ExerciseDeviationAnalytics,
+    type WorkoutAggregateAnalytics,
+    type WorkoutHistorySession,
+  } from "$lib/data/sessions";
 
-  let { data }: { data: PageData } = $props();
-
-  type SessionHistoryRow = PageData["sessionHistory"][number];
-  type WorkoutAnalyticsRow = PageData["workoutAnalytics"][number];
-  type ExerciseAnalyticsRow = PageData["exerciseAnalytics"][number];
+  type SessionHistoryRow = WorkoutHistorySession;
+  type WorkoutAnalyticsRow = WorkoutAggregateAnalytics;
+  type ExerciseAnalyticsRow = ExerciseDeviationAnalytics;
   type RangeOption = "all" | "7" | "30" | "90";
 
-  const sessionHistory = $derived((data.sessionHistory as SessionHistoryRow[]) ?? []);
-  const workoutAnalytics = $derived((data.workoutAnalytics as WorkoutAnalyticsRow[]) ?? []);
-  const exerciseAnalytics = $derived((data.exerciseAnalytics as ExerciseAnalyticsRow[]) ?? []);
-  const selectedRange = $derived(((data.selectedRange as RangeOption | undefined) ?? "all") as RangeOption);
+  let sessionHistory = $state<SessionHistoryRow[]>([]);
+  let workoutAnalytics = $state<WorkoutAnalyticsRow[]>([]);
+  let exerciseAnalytics = $state<ExerciseAnalyticsRow[]>([]);
+  let selectedRange = $state<RangeOption>("all");
+  let isLoading = $state(true);
+  let errorMessage = $state<string | null>(null);
 
   let deletingSessionId = $state<number | null>(null);
+
+  function resolveDays(range: RangeOption): number | null {
+    if (range === "7") return 7;
+    if (range === "30") return 30;
+    if (range === "90") return 90;
+    return null;
+  }
+
+  async function loadHistory(range: RangeOption) {
+    isLoading = true;
+    errorMessage = null;
+    const days = resolveDays(range);
+
+    try {
+      const [historyRows, workoutRows, exerciseRows] = await Promise.all([
+        getWorkoutSessionHistoryLocal(120, days),
+        getWorkoutAggregateAnalyticsLocal(50, days),
+        getExerciseDeviationAnalyticsLocal(50, days),
+      ]);
+
+      sessionHistory = historyRows;
+      workoutAnalytics = workoutRows;
+      exerciseAnalytics = exerciseRows;
+      selectedRange = range;
+
+      const url = new URL(window.location.href);
+      if (range === "all") {
+        url.searchParams.delete("range");
+      } else {
+        url.searchParams.set("range", range);
+      }
+      window.history.replaceState({}, "", url);
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : "Failed to load workout history.";
+    } finally {
+      isLoading = false;
+      deletingSessionId = null;
+    }
+  }
+
+  async function handleDeleteSession(sessionId: number) {
+    if (!confirm("Are you sure you want to delete this workout session?")) {
+      return;
+    }
+
+    deletingSessionId = sessionId;
+    errorMessage = null;
+
+    try {
+      await deleteWorkoutSessionLocal(sessionId);
+      await loadHistory(selectedRange);
+    } catch (error) {
+      deletingSessionId = null;
+      errorMessage = error instanceof Error ? error.message : "Failed to delete workout session.";
+    }
+  }
 
   const overallStats = $derived.by(() => {
     const totalSessions = sessionHistory.length;
@@ -81,10 +146,14 @@
     return "Critical";
   }
 
-  $effect(() => {
-    // Reset deleting state when data changes (after deletion completes)
-    sessionHistory;
-    deletingSessionId = null;
+  onMount(async () => {
+    const url = new URL(window.location.href);
+    const requestedRange = (url.searchParams.get("range") ?? "all") as RangeOption;
+    const initialRange: RangeOption = ["all", "7", "30", "90"].includes(requestedRange)
+      ? requestedRange
+      : "all";
+
+    await loadHistory(initialRange);
   });
 </script>
 
@@ -97,44 +166,56 @@
       Track outcomes across sessions and spot where execution drifts from plan.
     </Typography>
 
+    {#if errorMessage}
+      <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+        <Typography variant="body" size="sm" color="tertiary" as="p">
+          {errorMessage}
+        </Typography>
+      </div>
+    {/if}
+
     <div class="mt-4" role="group" aria-label="History date range">
       <div class="range-group" role="radiogroup" aria-label="Date range filter">
-        <a
-          href="/history?range=all"
+        <button
+          type="button"
           role="radio"
           aria-checked={selectedRange === "all"}
           class="range-option"
           class:active={selectedRange === "all"}
+          onclick={() => loadHistory("all")}
         >
           All time
-        </a>
-        <a
-          href="/history?range=7"
+        </button>
+        <button
+          type="button"
           role="radio"
           aria-checked={selectedRange === "7"}
           class="range-option"
           class:active={selectedRange === "7"}
+          onclick={() => loadHistory("7")}
         >
           Last 7 days
-        </a>
-        <a
-          href="/history?range=30"
+        </button>
+        <button
+          type="button"
           role="radio"
           aria-checked={selectedRange === "30"}
           class="range-option"
           class:active={selectedRange === "30"}
+          onclick={() => loadHistory("30")}
         >
           Last 30 days
-        </a>
-        <a
-          href="/history?range=90"
+        </button>
+        <button
+          type="button"
           role="radio"
           aria-checked={selectedRange === "90"}
           class="range-option"
           class:active={selectedRange === "90"}
+          onclick={() => loadHistory("90")}
         >
           Last 90 days
-        </a>
+        </button>
       </div>
     </div>
   </div>
@@ -164,7 +245,13 @@
     <Typography variant="headline" size="sm" as="h2" color="primary">
       Session Timeline
     </Typography>
-    {#if sessionHistory.length === 0}
+    {#if isLoading}
+      <div class="mt-3">
+        <Typography variant="body" size="sm" color="tertiary" as="p">
+          Loading workout history...
+        </Typography>
+      </div>
+    {:else if sessionHistory.length === 0}
       <div class="mt-3">
         <Typography variant="body" size="sm" color="tertiary" as="p">
           No sessions logged yet.
@@ -200,24 +287,16 @@
                 <td>{row.deviation_sets}</td>
                 <td>{formatDuration(Number(row.duration_seconds))}</td>
                 <td>
-                  <form method="POST" action="?/delete" onsubmit={(e) => {
-                    if (!confirm('Are you sure you want to delete this workout session?')) {
-                      e.preventDefault();
-                      return;
-                    }
-                    deletingSessionId = row.session_id;
-                  }}>
-                    <input type="hidden" name="sessionId" value={row.session_id} />
-                    <Button
-                      type="submit"
-                      variant="tertiary"
-                      size="sm"
-                      loading={deletingSessionId === row.session_id}
-                      disabled={deletingSessionId !== null}
-                    >
-                      Delete
-                    </Button>
-                  </form>
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    size="sm"
+                    loading={deletingSessionId === row.session_id}
+                    disabled={deletingSessionId !== null}
+                    onclick={() => handleDeleteSession(row.session_id)}
+                  >
+                    Delete
+                  </Button>
                 </td>
               </tr>
             {/each}

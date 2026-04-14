@@ -1,6 +1,28 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import Typography from "$lib/components/Typography.svelte";
+  import { getDatabaseRuntimeStatus, initializeAppDatabase } from '$lib/data/sqlite';
   import "../app.css";
+
+  let { children } = $props();
+
+  let databaseState = $state(getDatabaseRuntimeStatus());
+
+  onMount(async () => {
+    databaseState = getDatabaseRuntimeStatus();
+
+    if (!databaseState.isNativePlatform) {
+      return;
+    }
+
+    try {
+      await initializeAppDatabase();
+    } catch {
+      // Surface the failure via the status banner below.
+    } finally {
+      databaseState = getDatabaseRuntimeStatus();
+    }
+  });
 </script>
 
 <div class="surface-base min-h-screen flex flex-col">
@@ -43,6 +65,20 @@
   <main
     class="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 md:px-8 pt-24 sm:pt-32 pb-8 sm:pb-16"
   >
-    <slot />
+    {#if databaseState.isNativePlatform && databaseState.state === 'initializing'}
+      <div class="mb-4 rounded-2xl border border-(--color-border-strong) bg-(--color-surface-raised) px-4 py-3" role="status" aria-live="polite">
+        <Typography as="p" variant="body" size="sm" color="secondary">
+          Preparing offline storage for this device...
+        </Typography>
+      </div>
+    {:else if databaseState.isNativePlatform && databaseState.state === 'error' && databaseState.errorMessage}
+      <div class="mb-4 rounded-2xl border border-red-300 bg-red-50 px-4 py-3" role="status" aria-live="polite">
+        <Typography as="p" variant="body" size="sm" color="secondary">
+          Offline storage could not be initialized: {databaseState.errorMessage}
+        </Typography>
+      </div>
+    {/if}
+
+    {@render children?.()}
   </main>
 </div>

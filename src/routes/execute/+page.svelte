@@ -1,12 +1,19 @@
 <script lang="ts">
-  import { invalidateAll } from "$app/navigation";
+  import { onMount } from "svelte";
   import Button from "$lib/components/Button.svelte";
   import Card from "$lib/components/Card.svelte";
   import Input from "$lib/components/Input.svelte";
   import Typography from "$lib/components/Typography.svelte";
-  import type { PageData } from "./$types";
-
-  let { data }: { data: PageData } = $props();
+  import {
+    getAllWorkoutsLocal,
+    getWorkoutWithExercisesLocal,
+  } from "$lib/data/workouts";
+  import {
+    completeWorkoutSessionLocal,
+    createWorkoutSessionLocal,
+    logSessionSetLocal,
+    type SessionSetStatus,
+  } from "$lib/data/sessions";
 
   type WorkoutExercise = {
     id: number;
@@ -62,7 +69,7 @@
     isSkipped: boolean;
   };
 
-  const workouts = $derived((data.workouts as Workout[]) ?? []);
+  let workouts = $state<Workout[]>([]);
 
   let selectedWorkoutId = $state<number | null>(null);
   let currentSessionId = $state<number | null>(null);
@@ -211,22 +218,6 @@
     return options;
   }
 
-  async function postSessionAction(payload: Record<string, unknown>) {
-    const response = await fetch("/execute/session", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error("Unable to save workout session data.");
-    }
-
-    return response.json();
-  }
-
   async function startSession() {
     if (!selectedWorkout || selectedWorkout.exercises.length === 0) {
       return;
@@ -244,15 +235,7 @@
       totalSetsPlanned += progress.totalSets;
     }
 
-    const sessionData = await postSessionAction({
-      action: "start",
-      workoutId: Number(selectedWorkout.id),
-      totalSetsPlanned,
-    });
-
-    if (!sessionData || typeof sessionData.sessionId !== "number" || sessionData.sessionId <= 0) {
-      throw new Error("Unable to initialize workout session storage.");
-    }
+    const sessionId = await createWorkoutSessionLocal(Number(selectedWorkout.id), totalSetsPlanned);
 
     exerciseProgressMap = newProgressMap;
     // Start with the first exercise
@@ -260,7 +243,7 @@
     currentExerciseId = firstExerciseId ?? null;
 
     completedSets = [];
-    currentSessionId = sessionData.sessionId;
+    currentSessionId = sessionId;
     persistenceError = null;
     showDeviationForm = false;
     showNextSetChooser = false;
@@ -278,11 +261,7 @@
   async function endSession() {
     if (currentSessionId != null) {
       try {
-        await postSessionAction({
-          action: "complete",
-          sessionId: currentSessionId,
-          setsCompleted: completedSets.length,
-        });
+        await completeWorkoutSessionLocal(currentSessionId, completedSets.length);
       } catch {
         persistenceError = "Session ended locally, but final results were not saved to the database.";
       }
@@ -304,8 +283,6 @@
     stopwatchElapsedMs = 0;
     stopwatchRunning = false;
     stopwatchAnchorMs = null;
-
-    await invalidateAll();
   }
 
   async function completeCurrentSet(status: "expected" | "deviation", reps: number, weight: number | null) {
@@ -331,21 +308,20 @@
       },
     ];
 
-    // Persist to server
+    // Persist the set in local SQLite
     if (currentSessionId != null) {
       try {
-        await postSessionAction({
-          action: "set",
+        await logSessionSetLocal({
           sessionId: currentSessionId,
           workoutExerciseId: currentExerciseProgress.workoutExerciseId,
           exerciseId: currentExerciseProgress.exerciseId,
           setNumber: currentSet.setNumber,
           targetReps: currentSet.targetReps,
           targetWeight: currentSet.targetWeight,
-          targetUnit: currentSet.targetUnit,
+          targetUnit: currentSet.targetUnit as "kg" | "s",
           actualReps: reps,
           actualWeight: weight,
-          status,
+          status: status as SessionSetStatus,
         });
       } catch {
         persistenceError = "Set completed locally, but could not be written to the database.";
@@ -375,22 +351,26 @@
       // Workout complete
       if (currentSessionId != null) {
         try {
-          await postSessionAction({
-            action: "complete",
-            sessionId: currentSessionId,
-            setsCompleted: completedSets.length,
-          });
+          await completeWorkoutSessionLocal(currentSessionId, completedSets.length);
         } catch (e) {
           persistenceError = "Workout marked complete locally, but final status was not saved.";
         }
       }
-      await invalidateAll();
     } else {
       // Show options
       availableNextOptions = options;
       showNextSetChooser = true;
     }
   }
+
+  onMount(async () => {
+    const baseWorkouts = await getAllWorkoutsLocal();
+    const workoutsWithExercises = (
+      await Promise.all(baseWorkouts.map((workout) => getWorkoutWithExercisesLocal(Number(workout.id))))
+    ).filter((workout): workout is NonNullable<typeof workout> => Boolean(workout));
+
+    workouts = workoutsWithExercises as Workout[];
+  });
 
   function selectNextSet(exerciseId: number) {
     currentExerciseId = exerciseId;

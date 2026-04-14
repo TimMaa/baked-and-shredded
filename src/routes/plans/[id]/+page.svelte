@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+  import { onMount } from "svelte";
   import { flip } from "svelte/animate";
   import Button from "$lib/components/Button.svelte";
   import Card from "$lib/components/Card.svelte";
@@ -7,9 +7,28 @@
   import Input from "$lib/components/Input.svelte";
   import MuscleGroupCoverage from "$lib/components/MuscleGroupCoverage.svelte";
   import WorkoutSelector from "$lib/components/WorkoutSelector.svelte";
-  import type { PageData, ActionData } from "./$types";
+  import {
+    addWorkoutExerciseLocal,
+    deleteWorkoutExerciseLocal,
+    getWorkoutWithExercisesLocal,
+    reorderWorkoutExercisesLocal,
+    updateWorkoutLocal,
+    type WorkoutExerciseRecord,
+    type WorkoutWithExercisesRecord,
+  } from "$lib/data/workouts";
+  import { getAllExercisesLocal, type ExerciseRecord } from "$lib/data/exercises";
+  import {
+    createDefaultMuscleRatings,
+    normalizeMuscleRatings,
+    type MuscleRatings,
+  } from "$lib/muscleGroups";
 
-  let { data, form }: { data: PageData; form?: ActionData } = $props();
+  let planId = $state<number | null>(null);
+  let plan = $state<WorkoutWithExercisesRecord | null>(null);
+  let availableExercises = $state<ExerciseRecord[]>([]);
+  let focusAreaRatings = $state<MuscleRatings>(createDefaultMuscleRatings());
+  let orderedExercises = $state<WorkoutExerciseRecord[]>([]);
+  let isLoading = $state(true);
 
   let isEditingPlan = $state(false);
   let editName = $state("");
@@ -22,50 +41,159 @@
   let selectedExerciseId = $state<number | null>(null);
   let selectedSets = $state("3");
   let selectedReps = $state("10");
-  let selectedTargetUnit = $state<'kg' | 's'>("kg");
+  let selectedTargetUnit = $state<"kg" | "s">("kg");
   let selectedTargetValue = $state("");
-  let orderedExercises = $state<PageData['plan']['exercises']>([]);
   let draggedExerciseId = $state<number | null>(null);
   let dragOverExerciseId = $state<number | null>(null);
-  let reorderForm = $state<HTMLFormElement | null>(null);
-  let reorderedIdsInput = $state<HTMLInputElement | null>(null);
 
-  $effect(() => {
-    editName = data.plan.name;
-    editDescription = data.plan.description;
-    orderedExercises = data.plan.exercises ?? [];
-  });
+  function resolvePlanIdFromPathname() {
+    const idSegment = window.location.pathname.split("/").filter(Boolean).at(-1);
+    const resolved = Number.parseInt(idSegment ?? "", 10);
+    return Number.isFinite(resolved) && resolved > 0 ? resolved : null;
+  }
 
-  const handleUpdatePlan = async (e: Event) => {
+  function setAutoClearingSuccess(message: string) {
+    successMessage = message;
+    setTimeout(() => {
+      successMessage = null;
+    }, 3000);
+  }
+
+  function buildFocusAreaRatings(exercises: WorkoutExerciseRecord[]) {
+    const ratings = createDefaultMuscleRatings();
+
+    for (const exercise of exercises) {
+      const normalized = normalizeMuscleRatings(exercise.focus_areas);
+      for (const [group, rating] of Object.entries(normalized)) {
+        ratings[group] = (ratings[group] ?? 0) + Number(rating || 0);
+      }
+    }
+
+    return ratings;
+  }
+
+  async function loadPlanData() {
+    if (planId == null) {
+      throw new Error("Invalid workout ID");
+    }
+
+    isLoading = true;
+    const [workout, exercises] = await Promise.all([
+      getWorkoutWithExercisesLocal(planId),
+      getAllExercisesLocal(),
+    ]);
+
+    if (!workout) {
+      throw new Error("Workout not found");
+    }
+
+    plan = workout;
+    availableExercises = exercises;
+    orderedExercises = workout.exercises ?? [];
+    editName = workout.name;
+    editDescription = workout.description;
+    focusAreaRatings = buildFocusAreaRatings(orderedExercises);
+    isLoading = false;
+  }
+
+  async function handleUpdatePlan(event: SubmitEvent) {
+    event.preventDefault();
+
+    if (planId == null) {
+      errorMessage = "Invalid workout ID";
+      return;
+    }
+
     isSubmitting = true;
     errorMessage = null;
     successMessage = null;
-  };
 
-  const handleAddExercise = async (e: Event) => {
-    isSubmitting = true;
-    errorMessage = null;
-  };
-
-  $effect(() => {
-    if (form?.success) {
-      successMessage = form.message || "Updated successfully";
+    try {
+      await updateWorkoutLocal(planId, editName, editDescription);
+      await loadPlanData();
       isEditingPlan = false;
-      isSubmitting = false;
-      showAddForm = false;
-      selectedExerciseId = null;
-      selectedSets = "3";
-      selectedReps = "10";
-      selectedTargetUnit = "kg";
-      selectedTargetValue = "";
-      setTimeout(() => {
-        successMessage = null;
-      }, 3000);
-    } else if (form?.message) {
-      errorMessage = form.message;
+      setAutoClearingSuccess("Updated successfully");
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : "Failed to update workout";
+    } finally {
       isSubmitting = false;
     }
-  });
+  }
+
+  async function handleAddExercise(event: SubmitEvent) {
+    event.preventDefault();
+
+    if (planId == null) {
+      errorMessage = "Invalid workout ID";
+      return;
+    }
+
+    const exerciseId = Number.parseInt(String(selectedExerciseId), 10);
+    const sets = Number.parseInt(selectedSets, 10);
+    const targetValue = Number.parseFloat(selectedTargetValue);
+    const rawReps = Number.parseInt(selectedReps, 10);
+    const reps = selectedTargetUnit === "s" ? 1 : rawReps;
+
+    if (!Number.isInteger(exerciseId) || !Number.isInteger(sets) || Number.isNaN(targetValue)) {
+      errorMessage = "Missing required fields";
+      return;
+    }
+
+    if (sets < 1 || sets > 100) {
+      errorMessage = "Sets must be between 1 and 100";
+      return;
+    }
+
+    if (selectedTargetUnit === "kg" && (Number.isNaN(reps) || reps < 1 || reps > 1000)) {
+      errorMessage = "Reps must be between 1 and 1000";
+      return;
+    }
+
+    if (selectedTargetUnit === "kg" && (targetValue < 0 || targetValue > 10000)) {
+      errorMessage = "Weight must be between 0 and 10000 kg";
+      return;
+    }
+
+    if (selectedTargetUnit === "s" && (targetValue < 1 || targetValue > 3600)) {
+      errorMessage = "Time must be between 1 and 3600 seconds";
+      return;
+    }
+
+    isSubmitting = true;
+    errorMessage = null;
+    successMessage = null;
+
+    try {
+      await addWorkoutExerciseLocal(planId, exerciseId, sets, reps, targetValue, selectedTargetUnit);
+      await loadPlanData();
+      resetAddForm();
+      setAutoClearingSuccess("Exercise added");
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : "Failed to add exercise";
+    } finally {
+      isSubmitting = false;
+    }
+  }
+
+  async function handleRemoveExercise(exerciseRowId: number, exerciseName: string) {
+    if (!confirm(`Remove ${exerciseName} from this workout?`)) {
+      return;
+    }
+
+    isSubmitting = true;
+    errorMessage = null;
+    successMessage = null;
+
+    try {
+      await deleteWorkoutExerciseLocal(exerciseRowId);
+      await loadPlanData();
+      setAutoClearingSuccess("Exercise removed");
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : "Failed to remove exercise";
+    } finally {
+      isSubmitting = false;
+    }
+  }
 
   const resetAddForm = () => {
     showAddForm = false;
@@ -77,16 +205,26 @@
     errorMessage = null;
   };
 
-  const persistExerciseOrder = () => {
-    if (!reorderedIdsInput || !reorderForm) {
+  const persistExerciseOrder = async () => {
+    if (planId == null) {
+      errorMessage = "Invalid workout ID";
       return;
     }
 
-    reorderedIdsInput.value = JSON.stringify(orderedExercises.map((exercise) => exercise.id));
     isSubmitting = true;
     errorMessage = null;
     successMessage = null;
-    reorderForm.requestSubmit();
+
+    try {
+      const orderedIds = orderedExercises.map((exercise) => exercise.id);
+      await reorderWorkoutExercisesLocal(planId, orderedIds);
+      await loadPlanData();
+      setAutoClearingSuccess("Exercise order updated");
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : "Failed to update exercise order";
+    } finally {
+      isSubmitting = false;
+    }
   };
 
   const moveExerciseRelative = (exerciseId: number, direction: -1 | 1) => {
@@ -104,7 +242,7 @@
     const [movedExercise] = reordered.splice(currentIndex, 1);
     reordered.splice(nextIndex, 0, movedExercise);
     orderedExercises = reordered;
-    persistExerciseOrder();
+    void persistExerciseOrder();
   };
 
   const reorderByDropTarget = (draggedId: number, dropTargetId: number) => {
@@ -123,7 +261,7 @@
     const [movedExercise] = reordered.splice(sourceIndex, 1);
     reordered.splice(targetIndex, 0, movedExercise);
     orderedExercises = reordered;
-    persistExerciseOrder();
+    void persistExerciseOrder();
   };
 
   const handleDragStart = (event: DragEvent, exerciseId: number) => {
@@ -154,6 +292,16 @@
     dragOverExerciseId = null;
     draggedExerciseId = null;
   };
+
+  onMount(async () => {
+    try {
+      planId = resolvePlanIdFromPathname();
+      await loadPlanData();
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : "Failed to load workout";
+      isLoading = false;
+    }
+  });
 </script>
 
 <div class="space-y-6 sm:space-y-8">
@@ -177,7 +325,7 @@
     <div>
       <a href="/plans" class="text-primary hover:text-secondary text-sm mb-2 inline-block">← Back to Plans</a>
       <Typography variant="display" size="sm" as="h1" color="primary">
-        {data.plan.name}
+        {plan?.name ?? "Workout"}
       </Typography>
       <Typography variant="body" size="md" color="tertiary" as="p">
         Configure your workout session
@@ -196,12 +344,7 @@
 
   {#if isEditingPlan}
     <Card>
-      <form
-        method="POST"
-        action="?/updatePlan"
-        use:enhance
-        onsubmit={handleUpdatePlan}
-      >
+      <form onsubmit={handleUpdatePlan}>
         <div class="space-y-4 sm:space-y-6">
           <div>
             <label for="edit-name">
@@ -254,8 +397,8 @@
               size="md"
               onclick={() => {
                 isEditingPlan = false;
-                editName = data.plan.name;
-                editDescription = data.plan.description;
+                editName = plan?.name ?? "";
+                editDescription = plan?.description ?? "";
                 errorMessage = null;
               }}
             >
@@ -267,14 +410,14 @@
     </Card>
   {/if}
 
-  {#if data.focusAreaRatings}
+  {#if plan}
     <Card>
       <div class="mb-4">
         <Typography variant="headline" size="sm" as="h2" color="primary">
           Muscle Group Coverage
         </Typography>
       </div>
-      <MuscleGroupCoverage muscleRatings={data.focusAreaRatings} />
+      <MuscleGroupCoverage muscleRatings={focusAreaRatings} />
     </Card>
   {/if}
 
@@ -292,12 +435,7 @@
 
     {#if showAddForm}
       <Card>
-        <form
-          method="POST"
-          action="?/addExercise"
-          use:enhance
-          onsubmit={handleAddExercise}
-        >
+        <form onsubmit={handleAddExercise}>
           <div class="space-y-4 sm:space-y-6">
             <div>
               <label for="workout-select">
@@ -307,7 +445,7 @@
               </label>
               <div class="mt-2 sm:mt-3">
                 <WorkoutSelector
-                  workouts={data.workouts}
+                  workouts={availableExercises}
                   selected={selectedExerciseId}
                   onSelect={(id) => (selectedExerciseId = id)}
                 />
@@ -403,8 +541,6 @@
               </div>
             </div>
 
-            <input type="hidden" name="exerciseId" value={selectedExerciseId} />
-
             <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 pt-2 sm:pt-4">
               <Button
                 type="submit"
@@ -428,17 +564,19 @@
       </Card>
     {/if}
 
-    {#if !data.plan.exercises || data.plan.exercises.length === 0}
+    {#if isLoading}
+      <Card>
+        <Typography variant="body" size="md" color="tertiary" as="p">
+          Loading workout details...
+        </Typography>
+      </Card>
+    {:else if !orderedExercises || orderedExercises.length === 0}
       <Card>
         <Typography variant="body" size="md" color="tertiary" as="p">
           No exercises added yet. Add your first exercise to set up this training session.
         </Typography>
       </Card>
     {:else}
-        <form method="POST" action="?/reorderExercises" use:enhance bind:this={reorderForm} class="sr-only">
-          <input type="hidden" name="orderedExerciseIds" bind:this={reorderedIdsInput} />
-        </form>
-
       <div class="space-y-3 sm:space-y-4" role="list" aria-label="Exercises in workout">
           {#each orderedExercises as exercise, index (exercise.id)}
             <div animate:flip={{ duration: 220 }}>
@@ -473,7 +611,7 @@
                       variant="tertiary"
                       size="sm"
                       disabled={isSubmitting || index === 0}
-                      onclick={() => moveExerciseRelative(exercise.id, -1)}
+                      onclick={() => void moveExerciseRelative(exercise.id, -1)}
                     >
                       Move Up
                     </Button>
@@ -482,25 +620,19 @@
                       variant="tertiary"
                       size="sm"
                       disabled={isSubmitting || index === orderedExercises.length - 1}
-                      onclick={() => moveExerciseRelative(exercise.id, 1)}
+                      onclick={() => void moveExerciseRelative(exercise.id, 1)}
                     >
                       Move Down
                     </Button>
-                    <form method="POST" action="?/removeExercise" style="display: contents;">
-                      <input type="hidden" name="exerciseId" value={exercise.id} />
-                      <Button
-                        type="submit"
-                        variant="tertiary"
-                        size="sm"
-                        onclick={() => {
-                          if (!confirm(`Remove ${exercise.exercise_name} from this workout?`)) {
-                            event?.preventDefault();
-                          }
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    </form>
+                    <Button
+                      type="button"
+                      variant="tertiary"
+                      size="sm"
+                      disabled={isSubmitting}
+                      onclick={() => void handleRemoveExercise(exercise.id, exercise.exercise_name)}
+                    >
+                      Remove
+                    </Button>
                   </div>
                 </div>
 
@@ -576,16 +708,5 @@
     border-radius: var(--radius-sm);
   }
 
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
 </style>
 
