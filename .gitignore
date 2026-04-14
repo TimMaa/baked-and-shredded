@@ -7,4 +7,3 @@ build/
 .env
 .env.local
 .vscode/settings.json
-android

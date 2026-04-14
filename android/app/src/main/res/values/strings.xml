@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Baked &amp; Shredded</string>
+    <string name="title_activity_main">Baked &amp; Shredded</string>
+    <string name="package_name">com.bakedandshredded.app</string>
+    <string name="custom_url_scheme">com.bakedandshredded.app</string>
+</resources>
