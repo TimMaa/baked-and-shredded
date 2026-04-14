@@ -471,6 +471,25 @@
                 </div>
               </div>
 
+              <div>
+                <label for="target-unit">
+                  <Typography variant="body" size="md" as="span" color="secondary">
+                    Unit
+                  </Typography>
+                </label>
+                <div class="mt-2 sm:mt-3">
+                  <select
+                    id="target-unit"
+                    name="targetUnit"
+                    bind:value={selectedTargetUnit}
+                    class="w-full"
+                  >
+                    <option value="kg">Weight (kg)</option>
+                    <option value="s">Time (s)</option>
+                  </select>
+                </div>
+              </div>
+
               {#if selectedTargetUnit === 'kg'}
                 <div>
                   <label for="reps">
@@ -504,25 +523,6 @@
               {/if}
 
               <div>
-                <label for="target-unit">
-                  <Typography variant="body" size="md" as="span" color="secondary">
-                    Unit
-                  </Typography>
-                </label>
-                <div class="mt-2 sm:mt-3">
-                  <select
-                    id="target-unit"
-                    name="targetUnit"
-                    bind:value={selectedTargetUnit}
-                    class="w-full"
-                  >
-                    <option value="kg">Weight (kg)</option>
-                    <option value="s">Time (s)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
                 <label for="target-value">
                   <Typography variant="body" size="md" as="span" color="secondary">
                     {selectedTargetUnit === 'kg' ? 'Weight per Rep (kg)' : 'Time per Set (s)'}
@@ -534,6 +534,7 @@
                     id="target-value"
                     name="targetValue"
                     required
+                    step={selectedTargetUnit === 'kg' ? 0.25 : 1}
                     bind:value={selectedTargetValue}
                     placeholder={selectedTargetUnit === 'kg' ? 'e.g. 20' : 'e.g. 30'}
                   />
