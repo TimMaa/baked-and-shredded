@@ -1,6 +1,7 @@
 <script lang="ts">
   import Card from "$lib/components/Card.svelte";
   import Typography from "$lib/components/Typography.svelte";
+  import Button from "$lib/components/Button.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -14,6 +15,8 @@
   const workoutAnalytics = $derived((data.workoutAnalytics as WorkoutAnalyticsRow[]) ?? []);
   const exerciseAnalytics = $derived((data.exerciseAnalytics as ExerciseAnalyticsRow[]) ?? []);
   const selectedRange = $derived(((data.selectedRange as RangeOption | undefined) ?? "all") as RangeOption);
+
+  let deletingSessionId = $state<number | null>(null);
 
   const overallStats = $derived.by(() => {
     const totalSessions = sessionHistory.length;
@@ -77,6 +80,12 @@
     if (band === "warning") return "Watch";
     return "Critical";
   }
+
+  $effect(() => {
+    // Reset deleting state when data changes (after deletion completes)
+    sessionHistory;
+    deletingSessionId = null;
+  });
 </script>
 
 <div class="space-y-6 sm:space-y-8">
@@ -173,6 +182,7 @@
               <th scope="col">Expected</th>
               <th scope="col">Deviation</th>
               <th scope="col">Duration</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -189,6 +199,26 @@
                 <td>{row.expected_sets}</td>
                 <td>{row.deviation_sets}</td>
                 <td>{formatDuration(Number(row.duration_seconds))}</td>
+                <td>
+                  <form method="POST" action="?/delete" onsubmit={(e) => {
+                    if (!confirm('Are you sure you want to delete this workout session?')) {
+                      e.preventDefault();
+                      return;
+                    }
+                    deletingSessionId = row.session_id;
+                  }}>
+                    <input type="hidden" name="sessionId" value={row.session_id} />
+                    <Button
+                      type="submit"
+                      variant="tertiary"
+                      size="sm"
+                      loading={deletingSessionId === row.session_id}
+                      disabled={deletingSessionId !== null}
+                    >
+                      Delete
+                    </Button>
+                  </form>
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -222,7 +252,7 @@
             </thead>
             <tbody>
               {#each workoutAnalytics as row (row.workout_id)}
-                <tr>
+                <tr class="align-middle">
                   <th scope="row" class="font-medium">{row.workout_name}</th>
                   <td>{row.sessions_count}</td>
                   <td>{row.avg_completion_rate_pct}%</td>
@@ -290,7 +320,6 @@
     text-align: left;
     padding: 0.5rem;
     border-bottom: 1px solid var(--outline-variant);
-    vertical-align: top;
   }
 
   .range-group {

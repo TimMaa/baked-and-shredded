@@ -585,6 +585,14 @@ export async function getWorkoutSuccessSummary(limit = 20): Promise<WorkoutSucce
   ) as WorkoutSuccessSummary[];
 }
 
+export async function deleteWorkoutSession(sessionId: number) {
+  await initDb();
+  // Delete session sets first (foreign key dependency)
+  dbRun('DELETE FROM session_sets WHERE session_id = ?', [sessionId]);
+  // Then delete the session
+  dbRun('DELETE FROM workout_sessions WHERE id = ?', [sessionId]);
+}
+
 export async function getWorkoutSessionHistory(
   limit = 100,
   days: number | null = null

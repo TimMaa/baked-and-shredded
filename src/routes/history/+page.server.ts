@@ -2,6 +2,7 @@ import {
   getExerciseDeviationAnalytics,
   getWorkoutAggregateAnalytics,
   getWorkoutSessionHistory,
+  deleteWorkoutSession,
 } from '$lib/db';
 
 const ALLOWED_RANGES = new Set(['all', '7', '30', '90']);
@@ -30,4 +31,28 @@ export const load = async ({ url }: { url: URL }) => {
     exerciseAnalytics,
     selectedRange,
   };
+};
+
+export const actions = {
+  delete: async ({ request }) => {
+    const formData = await request.formData();
+    const sessionId = formData.get('sessionId');
+
+    if (!sessionId || typeof sessionId !== 'string') {
+      return { error: 'Invalid session id.' };
+    }
+
+    const parsedSessionId = Number.parseInt(sessionId, 10);
+    if (!Number.isFinite(parsedSessionId) || parsedSessionId <= 0) {
+      return { error: 'Invalid session id.' };
+    }
+
+    try {
+      await deleteWorkoutSession(parsedSessionId);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting workout session:', error);
+      return { error: 'Failed to delete workout session.' };
+    }
+  },
 };
