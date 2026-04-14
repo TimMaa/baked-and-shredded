@@ -6,6 +6,7 @@
     size?: 'lg' | 'md' | 'sm' | 'xs';
     color?: 'primary' | 'secondary' | 'tertiary' | 'success' | 'error' | 'default';
     as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'div';
+    className?: string;
   }
 
   let {
@@ -13,6 +14,7 @@
     size = 'md',
     color = 'default',
     as = 'p',
+    className = '',
     children
   }: Props & { children: any } = $props();
 
@@ -23,7 +25,7 @@
 
 <svelte:element
   this={as}
-  class="{textClass} {colorClass}"
+  class="{textClass} {colorClass} {className}"
 >
   {@render children()}
 </svelte:element>

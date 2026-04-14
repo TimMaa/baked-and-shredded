@@ -7,6 +7,7 @@
     disabled?: boolean;
     loading?: boolean;
     type?: "button" | "submit" | "reset";
+    className?: string;
     onclick?: () => void;
   }
 
@@ -16,6 +17,7 @@
     disabled = false,
     loading = false,
     type = "button",
+    className = '',
     onclick,
     children,
   }: Props & { children: any } = $props();
@@ -23,7 +25,7 @@
   const buttonClass = $derived(getDynamicClasses.button(variant, size));
 </script>
 
-<button {type} disabled={disabled || loading} {onclick} class={buttonClass}>
+<button {type} disabled={disabled || loading} {onclick} class="{buttonClass} {className}">
   {#if loading}
     <span class="opacity-50">Loading...</span>
   {:else}

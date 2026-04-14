@@ -42,18 +42,44 @@
     status: "expected" | "deviation";
   };
 
-  type ExecutionStyle = "byExercise" | "staggered";
+  type ExerciseProgress = {
+    workoutExerciseId: number;
+    exerciseId: number;
+    exerciseName: string;
+    totalSets: number;
+    targetReps: number;
+    targetWeight: number | null;
+    targetUnit: string;
+    nextSetNumber: number;
+  };
+
+  type NextSetOption = {
+    exerciseId: number;
+    exerciseName: string;
+    setNumber: number;
+    totalSets: number;
+    isSameExercise: boolean;
+    isSkipped: boolean;
+  };
 
   const workouts = $derived((data.workouts as Workout[]) ?? []);
 
   let selectedWorkoutId = $state<number | null>(null);
-  let executionStyle = $state<ExecutionStyle>("staggered");
   let currentSessionId = $state<number | null>(null);
   let persistenceError = $state<string | null>(null);
   let sessionStarted = $state(false);
   let sessionStartedAt = $state<Date | null>(null);
-  let pendingSets = $state<SetQueueItem[]>([]);
+
+  // Exercise progress tracking - maps exercise_id to its progress
+  let exerciseProgressMap = $state<Map<number, ExerciseProgress>>(new Map());
+  let currentExerciseId = $state<number | null>(null);
   let completedSets = $state<CompletedSet[]>([]);
+
+  // Next set chooser UI state
+  let showNextSetChooser = $state(false);
+  let availableNextOptions = $state<NextSetOption[]>([]);
+
+  // Deviation form state
   let showDeviationForm = $state(false);
   let deviationReps = $state("");
   let deviationWeight = $state("");
@@ -66,22 +92,51 @@
     workouts.find((workout) => Number(workout.id) === selectedWorkoutId) ?? null
   );
 
-  const currentSet = $derived(pendingSets[0] ?? null);
+  const currentExerciseProgress = $derived(
+    currentExerciseId !== null ? exerciseProgressMap.get(currentExerciseId) : null
+  );
+
+  const currentSet = $derived.by(() => {
+    if (!currentExerciseProgress) return null;
+
+    return {
+      workoutExerciseId: currentExerciseProgress.workoutExerciseId,
+      exerciseId: currentExerciseProgress.exerciseId,
+      exerciseName: currentExerciseProgress.exerciseName,
+      setNumber: currentExerciseProgress.nextSetNumber,
+      totalSets: currentExerciseProgress.totalSets,
+      targetReps: currentExerciseProgress.targetReps,
+      targetWeight: currentExerciseProgress.targetWeight,
+      targetUnit: currentExerciseProgress.targetUnit,
+    };
+  });
+
   const currentSetKey = $derived(
     currentSet
-      ? `${currentSet.workoutExerciseId}-${currentSet.setNumber}`
+      ? `${currentSet.exerciseId}-${currentSet.setNumber}`
       : ""
   );
 
-  const totalSetCount = $derived(
-    pendingSets.length + completedSets.length
-  );
+  const totalSetCount = $derived.by(() => {
+    let totalPlanned = 0;
+    for (const progress of exerciseProgressMap.values()) {
+      totalPlanned += progress.totalSets;
+    }
+    return totalPlanned;
+  });
 
   const completionCount = $derived(completedSets.length);
 
-  const isWorkoutComplete = $derived(
-    sessionStarted && pendingSets.length === 0
-  );
+  const isWorkoutComplete = $derived.by(() => {
+    if (!sessionStarted || exerciseProgressMap.size === 0) return false;
+
+    for (const progress of exerciseProgressMap.values()) {
+      if (progress.nextSetNumber <= progress.totalSets) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   const isTimeBasedSet = $derived(currentSet?.targetUnit === "s");
 
@@ -99,72 +154,61 @@
     return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
   });
 
-  function buildByExerciseQueue(workout: Workout): SetQueueItem[] {
-    const queue: SetQueueItem[] = [];
+  function initializeExerciseProgress(workout: Workout) {
+    const newMap = new Map<number, ExerciseProgress>();
 
     for (const exercise of workout.exercises) {
-      for (let setNumber = 1; setNumber <= exercise.sets; setNumber += 1) {
-        queue.push({
-          workoutExerciseId: Number(exercise.id),
-          exerciseId: Number(exercise.exercise_id),
-          exerciseName: exercise.exercise_name,
-          setNumber,
-          totalSets: Number(exercise.sets),
-          targetReps: (exercise.target_unit || "kg") === "s" ? 1 : Number(exercise.target_reps),
-          targetWeight:
-            exercise.target_weight == null ? null : Number(exercise.target_weight),
-          targetUnit: exercise.target_unit || "kg",
+      const exerciseId = Number(exercise.exercise_id);
+      newMap.set(exerciseId, {
+        workoutExerciseId: Number(exercise.id),
+        exerciseId,
+        exerciseName: exercise.exercise_name,
+        totalSets: Number(exercise.sets),
+        targetReps: (exercise.target_unit || "kg") === "s" ? 1 : Number(exercise.target_reps),
+        targetWeight: exercise.target_weight == null ? null : Number(exercise.target_weight),
+        targetUnit: exercise.target_unit || "kg",
+        nextSetNumber: 1,
+      });
+    }
+
+    return newMap;
+  }
+
+  function calculateAvailableNextOptions(): NextSetOption[] {
+    if (!currentExerciseProgress) return [];
+
+    const options: NextSetOption[] = [];
+    const currentExerciseId = currentExerciseProgress.exerciseId;
+
+    // Add "continue same exercise" option if sets remain
+    if (currentExerciseProgress.nextSetNumber <= currentExerciseProgress.totalSets) {
+      options.push({
+        exerciseId: currentExerciseId,
+        exerciseName: currentExerciseProgress.exerciseName,
+        setNumber: currentExerciseProgress.nextSetNumber,
+        totalSets: currentExerciseProgress.totalSets,
+        isSameExercise: true,
+        isSkipped: false,
+      });
+    }
+
+    // Add options for other exercises with remaining sets
+    for (const [exerciseId, progress] of exerciseProgressMap.entries()) {
+      if (exerciseId === currentExerciseId) continue;
+
+      if (progress.nextSetNumber <= progress.totalSets) {
+        options.push({
+          exerciseId,
+          exerciseName: progress.exerciseName,
+          setNumber: progress.nextSetNumber,
+          totalSets: progress.totalSets,
+          isSameExercise: false,
+          isSkipped: false,
         });
       }
     }
 
-    return queue;
-  }
-
-  function buildStaggeredQueue(workout: Workout): SetQueueItem[] {
-    const queue: SetQueueItem[] = [];
-    const exercises = workout.exercises;
-    const exerciseCount = exercises.length;
-
-    if (exerciseCount === 0) {
-      return queue;
-    }
-
-    const maxSets = Math.max(...exercises.map((exercise) => Number(exercise.sets)));
-
-    // Diagonal traversal produces interleaved order like 112123234... for equal set counts.
-    for (let diagonal = 2; diagonal <= exerciseCount + maxSets; diagonal += 1) {
-      for (let exerciseIndex = 1; exerciseIndex <= exerciseCount; exerciseIndex += 1) {
-        const exercise = exercises[exerciseIndex - 1];
-        const setNumber = diagonal - exerciseIndex;
-
-        if (setNumber < 1 || setNumber > Number(exercise.sets)) {
-          continue;
-        }
-
-        queue.push({
-          workoutExerciseId: Number(exercise.id),
-          exerciseId: Number(exercise.exercise_id),
-          exerciseName: exercise.exercise_name,
-          setNumber,
-          totalSets: Number(exercise.sets),
-          targetReps: (exercise.target_unit || "kg") === "s" ? 1 : Number(exercise.target_reps),
-          targetWeight:
-            exercise.target_weight == null ? null : Number(exercise.target_weight),
-          targetUnit: exercise.target_unit || "kg",
-        });
-      }
-    }
-
-    return queue;
-  }
-
-  function buildExecutionQueue(workout: Workout, style: ExecutionStyle): SetQueueItem[] {
-    if (style === "byExercise") {
-      return buildByExerciseQueue(workout);
-    }
-
-    return buildStaggeredQueue(workout);
+    return options;
   }
 
   async function postSessionAction(payload: Record<string, unknown>) {
@@ -188,28 +232,39 @@
       return;
     }
 
-    const queue = buildExecutionQueue(selectedWorkout, executionStyle);
+    const newProgressMap = initializeExerciseProgress(selectedWorkout);
 
-    if (queue.length === 0) {
+    if (newProgressMap.size === 0) {
       return;
+    }
+
+    // Calculate total sets
+    let totalSetsPlanned = 0;
+    for (const progress of newProgressMap.values()) {
+      totalSetsPlanned += progress.totalSets;
     }
 
     const sessionData = await postSessionAction({
       action: "start",
       workoutId: Number(selectedWorkout.id),
-      executionStyle,
-      totalSetsPlanned: queue.length,
+      totalSetsPlanned,
     });
 
     if (!sessionData || typeof sessionData.sessionId !== "number" || sessionData.sessionId <= 0) {
       throw new Error("Unable to initialize workout session storage.");
     }
 
-    pendingSets = queue;
+    exerciseProgressMap = newProgressMap;
+    // Start with the first exercise
+    const firstExerciseId = Array.from(newProgressMap.keys())[0];
+    currentExerciseId = firstExerciseId ?? null;
+
     completedSets = [];
     currentSessionId = sessionData.sessionId;
     persistenceError = null;
     showDeviationForm = false;
+    showNextSetChooser = false;
+    availableNextOptions = [];
     deviationReps = "";
     deviationWeight = "";
     deviationError = null;
@@ -237,9 +292,12 @@
     selectedWorkoutId = null;
     currentSessionId = null;
     sessionStartedAt = null;
-    pendingSets = [];
+    exerciseProgressMap = new Map();
+    currentExerciseId = null;
     completedSets = [];
     showDeviationForm = false;
+    showNextSetChooser = false;
+    availableNextOptions = [];
     deviationReps = "";
     deviationWeight = "";
     deviationError = null;
@@ -251,58 +309,93 @@
   }
 
   async function completeCurrentSet(status: "expected" | "deviation", reps: number, weight: number | null) {
-    const activeSet = pendingSets[0];
-    if (!activeSet) {
+    if (!currentSet || !currentExerciseProgress) {
       return;
     }
 
-    const nextCompletedCount = completedSets.length + 1;
-    const hasRemainingAfterCompletion = pendingSets.length > 1;
-
+    // Add to completed sets
     completedSets = [
       ...completedSets,
       {
-        ...activeSet,
+        workoutExerciseId: currentExerciseProgress.workoutExerciseId,
+        exerciseId: currentExerciseProgress.exerciseId,
+        exerciseName: currentExerciseProgress.exerciseName,
+        setNumber: currentSet.setNumber,
+        totalSets: currentSet.totalSets,
+        targetReps: currentSet.targetReps,
+        targetWeight: currentSet.targetWeight,
+        targetUnit: currentSet.targetUnit,
         actualReps: reps,
         actualWeight: weight,
         status,
       },
     ];
 
-    pendingSets = pendingSets.slice(1);
-    showDeviationForm = false;
-    deviationReps = "";
-    deviationWeight = "";
-    deviationError = null;
-
+    // Persist to server
     if (currentSessionId != null) {
       try {
         await postSessionAction({
           action: "set",
           sessionId: currentSessionId,
-          workoutExerciseId: activeSet.workoutExerciseId,
-          exerciseId: activeSet.exerciseId,
-          setNumber: activeSet.setNumber,
-          targetReps: activeSet.targetReps,
-          targetWeight: activeSet.targetWeight,
-          targetUnit: activeSet.targetUnit,
+          workoutExerciseId: currentExerciseProgress.workoutExerciseId,
+          exerciseId: currentExerciseProgress.exerciseId,
+          setNumber: currentSet.setNumber,
+          targetReps: currentSet.targetReps,
+          targetWeight: currentSet.targetWeight,
+          targetUnit: currentSet.targetUnit,
           actualReps: reps,
           actualWeight: weight,
           status,
         });
-
-        if (!hasRemainingAfterCompletion) {
-          await postSessionAction({
-            action: "complete",
-            sessionId: currentSessionId,
-            setsCompleted: nextCompletedCount,
-          });
-          await invalidateAll();
-        }
       } catch {
         persistenceError = "Set completed locally, but could not be written to the database.";
       }
     }
+
+    // Increment the set number for current exercise
+    const updatedProgress = { ...currentExerciseProgress };
+    updatedProgress.nextSetNumber += 1;
+
+    // Create new map to trigger reactivity
+    const newProgressMap = new Map(exerciseProgressMap);
+    newProgressMap.set(currentExerciseProgress.exerciseId, updatedProgress);
+    exerciseProgressMap = newProgressMap;
+
+    // Calculate available options for the next set
+    const options = calculateAvailableNextOptions();
+
+    // Reset deviation form
+    showDeviationForm = false;
+    deviationReps = "";
+    deviationWeight = "";
+    deviationError = null;
+
+    // Show next set chooser or end session
+    if (options.length === 0) {
+      // Workout complete
+      if (currentSessionId != null) {
+        try {
+          await postSessionAction({
+            action: "complete",
+            sessionId: currentSessionId,
+            setsCompleted: completedSets.length,
+          });
+        } catch (e) {
+          persistenceError = "Workout marked complete locally, but final status was not saved.";
+        }
+      }
+      await invalidateAll();
+    } else {
+      // Show options
+      availableNextOptions = options;
+      showNextSetChooser = true;
+    }
+  }
+
+  function selectNextSet(exerciseId: number) {
+    currentExerciseId = exerciseId;
+    showNextSetChooser = false;
+    availableNextOptions = [];
   }
 
   function startStopwatch() {
@@ -380,41 +473,6 @@
     }
 
     await completeCurrentSet("deviation", reps, weight);
-  }
-
-  function skipCurrentSetForNow() {
-    if (pendingSets.length <= 1) {
-      return;
-    }
-
-    const first = pendingSets[0];
-    if (!first) {
-      return;
-    }
-
-    // Move the active set back by one position, but keep a leading block of
-    // same-exercise sets together when two or more are queued consecutively.
-    let groupLength = 1;
-    while (
-      groupLength < pendingSets.length &&
-      pendingSets[groupLength].exerciseId === first.exerciseId
-    ) {
-      groupLength += 1;
-    }
-
-    if (groupLength >= pendingSets.length) {
-      return;
-    }
-
-    const groupedCurrent = pendingSets.slice(0, groupLength);
-    const nextSet = pendingSets[groupLength];
-    const tail = pendingSets.slice(groupLength + 1);
-    pendingSets = [nextSet, ...groupedCurrent, ...tail];
-
-    showDeviationForm = false;
-    deviationReps = "";
-    deviationWeight = "";
-    deviationError = null;
   }
 
   const formattedSessionStartedAt = $derived(
@@ -533,53 +591,6 @@
       </Card>
 
       {#if selectedWorkoutId}
-        <Card>
-          <Typography variant="headline" size="sm" as="h2" color="primary">
-            Set Order
-          </Typography>
-          <div class="space-y-3 mt-3">
-            <label class="flex items-start p-3 rounded-lg cursor-pointer transition-all" class:selected={executionStyle === "staggered"}>
-              <input
-                type="radio"
-                name="executionStyle"
-                value="staggered"
-                checked={executionStyle === "staggered"}
-                onchange={() => (executionStyle = "staggered")}
-                class="w-5 h-5 mt-0.5 shrink-0"
-              />
-              <div class="ml-3 min-w-0">
-                <Typography variant="body" size="md" as="span" color="primary">
-                  Staggered (recommended)
-                </Typography>
-                <Typography variant="body" size="sm" color="tertiary" as="p">
-                  Interleaves sets across exercises, e.g. 112123234345455.
-                </Typography>
-              </div>
-            </label>
-
-            <label class="flex items-start p-3 rounded-lg cursor-pointer transition-all" class:selected={executionStyle === "byExercise"}>
-              <input
-                type="radio"
-                name="executionStyle"
-                value="byExercise"
-                checked={executionStyle === "byExercise"}
-                onchange={() => (executionStyle = "byExercise")}
-                class="w-5 h-5 mt-0.5 shrink-0"
-              />
-              <div class="ml-3 min-w-0">
-                <Typography variant="body" size="md" as="span" color="primary">
-                  By Exercise
-                </Typography>
-                <Typography variant="body" size="sm" color="tertiary" as="p">
-                  Finishes all sets of each exercise before moving to the next.
-                </Typography>
-              </div>
-            </label>
-          </div>
-        </Card>
-      {/if}
-
-      {#if selectedWorkoutId}
         <Button
           variant="secondary"
           size="md"
@@ -606,9 +617,6 @@
           <Typography variant="body" size="sm" color="tertiary" as="p">
             {progressLabel}
           </Typography>
-          <Typography variant="body" size="sm" color="tertiary" as="p">
-            Order: {executionStyle === "staggered" ? "Staggered" : "By Exercise"}
-          </Typography>
         </div>
         <Button
           variant="tertiary"
@@ -633,6 +641,44 @@
           <Typography variant="body" size="md" color="tertiary" as="p">
             All planned sets are completed.
           </Typography>
+        </div>
+      {:else if showNextSetChooser && availableNextOptions.length > 0}
+        <div class="mt-6 space-y-4">
+          <Typography variant="headline" size="sm" as="h3" color="primary">
+            What's next?
+          </Typography>
+          <Typography variant="body" size="md" color="tertiary" as="p">
+            Choose your next set to continue the workout
+          </Typography>
+
+          <div class="space-y-3">
+            {#each availableNextOptions as option (option.exerciseId)}
+              <button
+                type="button"
+                onclick={() => selectNextSet(option.exerciseId)}
+                class="w-full text-left hover:opacity-80 transition-opacity"
+              >
+                <Card>
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <Typography variant="headline" size="sm" as="h4" color="primary">
+                        {option.exerciseName}
+                      </Typography>
+                      <Typography variant="body" size="sm" color="tertiary" as="p">
+                        Set {option.setNumber} of {option.totalSets}
+                        {#if option.isSameExercise}
+                          <span class="text-secondary"> • Continue current exercise</span>
+                        {/if}
+                      </Typography>
+                    </div>
+                    <Typography variant="body" size="md" color="secondary" as="span">
+                      →
+                    </Typography>
+                  </div>
+                </Card>
+              </button>
+            {/each}
+          </div>
         </div>
       {:else if currentSet}
         <div class="mt-6 space-y-5 sm:space-y-6">
@@ -723,14 +769,6 @@
               }}
             >
               {showDeviationForm ? "Cancel Deviation" : "Record Deviation"}
-            </Button>
-            <Button
-              variant="tertiary"
-              size="md"
-              onclick={skipCurrentSetForNow}
-              disabled={pendingSets.length <= 1}
-            >
-              Postpone (Next Up)
             </Button>
           </div>
 

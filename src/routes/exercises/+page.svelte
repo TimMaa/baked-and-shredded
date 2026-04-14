@@ -127,7 +127,7 @@
       <Typography variant="body" size="sm" color="tertiary" as="p">
         Required column: exercise. Optional columns: description, tip. Use simplified muscle group columns with values 0-5.
       </Typography>
-      <Typography variant="body" size="sm" color="tertiary" as="p">
+      <Typography variant="body" size="sm" color="tertiary" as="p" className="overflow-x-clip text-ellipsis">
         Example header: exercise,description,tip,Chest,Back,Shoulders,Biceps,Triceps,Forearms,Abs,Lower_Back,Glutes,Quads,Hamstrings,Calves,Adductors_Abductors
       </Typography>
 

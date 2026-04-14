@@ -19,7 +19,7 @@
           >Baked & Shredded</Typography
         >
       </a>
-      <div class="flex flex-wrap gap-3 sm:gap-8 text-sm sm:text-body-md">
+      <div class="hidden sm:flex flex-wrap gap-8 text-body-md">
         <a
           href="/exercises"
           class="text-tertiary hover:text-primary transition-colors">Exercises</a

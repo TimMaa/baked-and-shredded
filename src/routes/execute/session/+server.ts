@@ -11,7 +11,6 @@ import type { RequestHandler } from './$types';
 type StartPayload = {
   action: 'start';
   workoutId: number;
-  executionStyle: 'byExercise' | 'staggered';
   totalSetsPlanned: number;
 };
 
@@ -53,7 +52,6 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const sessionId = await createWorkoutSession(
       Math.trunc(payload.workoutId),
-      payload.executionStyle,
       Math.trunc(payload.totalSetsPlanned)
     );
 

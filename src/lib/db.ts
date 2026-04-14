@@ -34,8 +34,8 @@ async function initDb() {
       db = new SQL.Database();
     }
 
-    initializeSchema();
   }
+  initializeSchema();
 
   return db;
 }
@@ -113,7 +113,6 @@ function initializeSchema() {
     CREATE TABLE IF NOT EXISTS workout_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workout_id INTEGER NOT NULL,
-      execution_style TEXT NOT NULL DEFAULT 'staggered',
       total_sets_planned INTEGER NOT NULL DEFAULT 0,
       started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       completed_at DATETIME,
@@ -121,13 +120,6 @@ function initializeSchema() {
       FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
     )
   `);
-
-  // Backfill columns for existing databases.
-  try {
-    db.run("ALTER TABLE workout_sessions ADD COLUMN execution_style TEXT NOT NULL DEFAULT 'staggered'");
-  } catch {
-    // Column already exists.
-  }
 
   try {
     db.run('ALTER TABLE workout_sessions ADD COLUMN total_sets_planned INTEGER NOT NULL DEFAULT 0');
@@ -451,7 +443,6 @@ export type WorkoutSuccessSummary = {
   session_id: number;
   workout_id: number;
   workout_name: string;
-  execution_style: string;
   started_at: string;
   completed_at: string | null;
   total_sets_planned: number;
@@ -490,13 +481,12 @@ export type ExerciseDeviationAnalytics = {
 
 export async function createWorkoutSession(
   workoutId: number,
-  executionStyle: 'byExercise' | 'staggered',
   totalSetsPlanned: number
 ) {
   await initDb();
   dbRun(
-    'INSERT INTO workout_sessions (workout_id, execution_style, total_sets_planned, started_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
-    [workoutId, executionStyle, totalSetsPlanned]
+    'INSERT INTO workout_sessions (workout_id, total_sets_planned, started_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
+    [workoutId, totalSetsPlanned]
   );
   const row = dbGet('SELECT id FROM workout_sessions ORDER BY id DESC LIMIT 1') as
     | { id?: number | string | bigint }
@@ -569,7 +559,6 @@ export async function getWorkoutSuccessSummary(limit = 20): Promise<WorkoutSucce
       ws.id as session_id,
       ws.workout_id,
       w.name as workout_name,
-      ws.execution_style,
       ws.started_at,
       ws.completed_at,
       ws.total_sets_planned,
@@ -610,7 +599,6 @@ export async function getWorkoutSessionHistory(
       ws.id as session_id,
       ws.workout_id,
       w.name as workout_name,
-      ws.execution_style,
       ws.started_at,
       ws.completed_at,
       ws.total_sets_planned,

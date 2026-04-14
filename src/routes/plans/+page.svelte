@@ -199,7 +199,7 @@
               </div>
               <div class="flex flex-col gap-2 sm:flex-row sm:gap-3 shrink-0 w-full sm:w-auto">
                 <a href="/plans/{plan.id}" class="no-underline">
-                  <Button variant="secondary" size="sm">
+                  <Button variant="secondary" size="sm" className="w-full">
                     Edit
                   </Button>
                 </a>
