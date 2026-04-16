@@ -58,6 +58,10 @@
           href="/history"
           class="text-tertiary hover:text-primary transition-colors">History</a
         >
+        <a
+          href="/import"
+          class="text-tertiary hover:text-primary transition-colors">Import</a
+        >
       </div>
     </div>
   </nav>

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Card from '$lib/components/Card.svelte';
-  import Typography from '$lib/components/Typography.svelte';
+  import Card from "$lib/components/Card.svelte";
+  import Typography from "$lib/components/Typography.svelte";
 </script>
 
 <div class="space-y-8 sm:space-y-12">
@@ -13,7 +13,9 @@
     </Typography>
   </section>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
+  <div
+    class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 md:gap-8"
+  >
     <a href="/exercises" class="no-underline">
       <Card hoverable>
         <div class="space-y-4">
@@ -22,7 +24,8 @@
             Manage Exercises
           </Typography>
           <Typography variant="body" size="sm" color="default" as="p">
-            Create and organize your exercises with descriptions and muscle targets
+            Create and organize your exercises with descriptions and muscle
+            targets
           </Typography>
         </div>
       </Card>
@@ -36,7 +39,8 @@
             Build Workouts
           </Typography>
           <Typography variant="body" size="sm" color="default" as="p">
-            Combine exercises into weekly programs and structure your training by day
+            Combine exercises into weekly programs and structure your training
+            by day
           </Typography>
         </div>
       </Card>
@@ -65,6 +69,20 @@
           </Typography>
           <Typography variant="body" size="sm" color="default" as="p">
             Review completion trends, adherence, and deviation hotspots
+          </Typography>
+        </div>
+      </Card>
+    </a>
+
+    <a href="/import" class="no-underline">
+      <Card hoverable>
+        <div class="space-y-4">
+          <div class="text-5xl">🗂️</div>
+          <Typography variant="headline" size="md" as="h2" color="primary">
+            Import
+          </Typography>
+          <Typography variant="body" size="sm" color="default" as="p">
+            Upload old workout data
           </Typography>
         </div>
       </Card>
