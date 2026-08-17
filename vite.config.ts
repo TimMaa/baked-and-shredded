@@ -1,8 +1,40 @@
-import { defineConfig } from 'vite';
-import devtoolsJson from 'vite-plugin-devtools-json';
-import { sveltekit } from '@sveltejs/kit/vite';
-import tailwindcss from '@tailwindcss/vite';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { VitePWA } from "vite-plugin-pwa";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [devtoolsJson(), sveltekit(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src/sw",
+      filename: "service-worker.ts",
+      injectRegister: "auto",
+      manifest: {
+        name: "Baked & Shredded",
+        short_name: "Baked",
+        description: "Personal workout tracker",
+        theme_color: "#f26b38",
+        background_color: "#1a1410",
+        display: "standalone",
+        orientation: "portrait",
+        icons: [
+          { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      devOptions: { enabled: false },
+    }),
+  ],
+  resolve: {
+    alias: {
+      "@": resolve(__dirname, "./src"),
+    },
+  },
 });

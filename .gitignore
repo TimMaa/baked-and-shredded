@@ -1,10 +1,21 @@
+# dependencies
 node_modules/
-.DS_Store
+
+# build
 dist/
-build/
-.svelte-kit/
-*.log
+
+# env
 .env
 .env.local
-data/
-.vscode/settings.json
+.env.*.local
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+.DS_Store
+
+# misc
+*.log
+*.tsbuildinfo

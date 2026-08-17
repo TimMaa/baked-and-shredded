@@ -1,42 +1,29 @@
+import type { MuscleRatings } from "@/types";
+
 export const MUSCLE_GROUP_CATEGORIES: Record<string, string[]> = {
-  "Upper Body": [
-    "Chest",
-    "Back",
-    "Shoulders",
-    "Biceps",
-    "Triceps",
-    "Forearms",
-  ],
+  "Upper Body": ["Chest", "Back", "Shoulders", "Biceps", "Triceps", "Forearms"],
   Core: ["Abs", "Lower_Back"],
-  "Lower Body": [
-    "Glutes",
-    "Quads",
-    "Hamstrings",
-    "Calves",
-    "Adductors_Abductors",
-  ],
+  "Lower Body": ["Glutes", "Quads", "Hamstrings", "Calves", "Adductors_Abductors"],
 };
 
 export const ALL_MUSCLE_GROUPS = Object.values(MUSCLE_GROUP_CATEGORIES).flat();
 
-export type MuscleRatings = Record<string, number>;
-
 export const MAX_MUSCLE_POINTS = 25;
 
 export const MUSCLE_GROUP_LABELS: Record<string, string> = {
-  Chest: 'Chest',
-  Back: 'Back',
-  Shoulders: 'Shoulders',
-  Biceps: 'Biceps',
-  Triceps: 'Triceps',
-  Forearms: 'Forearms',
-  Abs: 'Abs',
-  Lower_Back: 'Lower Back',
-  Glutes: 'Glutes',
-  Quads: 'Quads',
-  Hamstrings: 'Hamstrings',
-  Calves: 'Calves',
-  Adductors_Abductors: 'Adductors / Abductors',
+  Chest: "Chest",
+  Back: "Back",
+  Shoulders: "Shoulders",
+  Biceps: "Biceps",
+  Triceps: "Triceps",
+  Forearms: "Forearms",
+  Abs: "Abs",
+  Lower_Back: "Lower Back",
+  Glutes: "Glutes",
+  Quads: "Quads",
+  Hamstrings: "Hamstrings",
+  Calves: "Calves",
+  Adductors_Abductors: "Adductors / Abductors",
 };
 
 export function getMuscleGroupLabel(group: string): string {
@@ -52,11 +39,7 @@ export function createDefaultMuscleRatings(): MuscleRatings {
 
 export function normalizeMuscleRatings(input: unknown): MuscleRatings {
   const normalized = createDefaultMuscleRatings();
-
-  if (!input || typeof input !== 'object') {
-    return normalized;
-  }
-
+  if (!input || typeof input !== "object") return normalized;
   for (const group of ALL_MUSCLE_GROUPS) {
     const rawValue = (input as Record<string, unknown>)[group];
     const parsed = Number(rawValue);
@@ -64,7 +47,6 @@ export function normalizeMuscleRatings(input: unknown): MuscleRatings {
       normalized[group] = parsed;
     }
   }
-
   return normalized;
 }
 
