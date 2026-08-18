@@ -23,6 +23,42 @@ interface ActiveSet {
   targetUnit: "kg" | "s";
 }
 
+function computeNextSet(
+  progress: ExerciseProgress[],
+  currentWorkoutExerciseId: number | null
+): ActiveSet | null {
+  const currentIdx = currentWorkoutExerciseId
+    ? progress.findIndex((ep) => ep.workoutExerciseId === currentWorkoutExerciseId)
+    : -1;
+
+  const current = currentIdx >= 0 ? progress[currentIdx] : null;
+  if (current && current.completedSets < current.totalSets) {
+    return {
+      workoutExerciseId: current.workoutExerciseId,
+      exerciseId: current.exerciseId,
+      exerciseName: current.exerciseName,
+      setNumber: current.completedSets + 1,
+      targetReps: current.targetReps,
+      targetWeight: current.targetWeight,
+      targetUnit: current.targetUnit,
+    };
+  }
+
+  const remaining = progress.filter((ep) => ep.completedSets < ep.totalSets);
+  if (remaining.length === 0) return null;
+
+  const next = remaining[0];
+  return {
+    workoutExerciseId: next.workoutExerciseId,
+    exerciseId: next.exerciseId,
+    exerciseName: next.exerciseName,
+    setNumber: next.completedSets + 1,
+    targetReps: next.targetReps,
+    targetWeight: next.targetWeight,
+    targetUnit: next.targetUnit,
+  };
+}
+
 export function useWorkoutSession() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [exerciseProgress, setExerciseProgress] = useState<ExerciseProgress[]>([]);
@@ -30,6 +66,7 @@ export function useWorkoutSession() {
   const [completedSets, setCompletedSets] = useState<(SessionSet & { exerciseName: string })[]>([]);
   const [totalSetsPlanned, setTotalSetsPlanned] = useState(0);
   const [startedAt, setStartedAt] = useState<string | null>(null);
+  const [isResuming, setIsResuming] = useState(true);
 
   // Stopwatch
   const [stopwatchMs, setStopwatchMs] = useState(0);
@@ -62,6 +99,64 @@ export function useWorkoutSession() {
     setStopwatchMs(0);
   }, []);
 
+  // Resume active session from IndexedDB on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const activeSession = await db.getActiveSession();
+      if (cancelled || !activeSession) {
+        setIsResuming(false);
+        return;
+      }
+
+      const wes = await db.getWorkoutExercises(activeSession.workoutId);
+      const allExercises = await db.getAllExercises();
+      const sets = await db.getSessionSets(activeSession.id!);
+
+      const exerciseMap = new Map(allExercises.map((e) => [e.id!, e.name]));
+
+      const progress: ExerciseProgress[] = wes.map((we) => {
+        const completedCount = sets.filter(
+          (s) => s.workoutExerciseId === we.id
+        ).length;
+        return {
+          exerciseId: we.exerciseId,
+          workoutExerciseId: we.id!,
+          exerciseName: exerciseMap.get(we.exerciseId) || "Unknown",
+          totalSets: we.sets,
+          completedSets: completedCount,
+          targetReps: we.targetReps,
+          targetWeight: we.targetWeight,
+          targetUnit: we.targetUnit,
+        };
+      });
+
+      const enrichedSets = sets
+        .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+        .map((s) => ({
+          ...s,
+          exerciseName: exerciseMap.get(s.exerciseId) || "Unknown",
+        }));
+
+      if (cancelled) return;
+
+      setSessionId(activeSession.id!);
+      setTotalSetsPlanned(activeSession.totalSetsPlanned);
+      setStartedAt(activeSession.startedAt);
+      setExerciseProgress(progress);
+      setCompletedSets(enrichedSets);
+
+      const lastSet = enrichedSets[0];
+      const nextSet = computeNextSet(
+        progress,
+        lastSet?.workoutExerciseId ?? null
+      );
+      setActiveSet(nextSet);
+      setIsResuming(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const startSession = useCallback(
     async (
       workoutId: number,
@@ -86,17 +181,8 @@ export function useWorkoutSession() {
       }));
       setExerciseProgress(progress);
 
-      if (progress.length > 0) {
-        setActiveSet({
-          workoutExerciseId: progress[0].workoutExerciseId,
-          exerciseId: progress[0].exerciseId,
-          exerciseName: progress[0].exerciseName,
-          setNumber: 1,
-          targetReps: progress[0].targetReps,
-          targetWeight: progress[0].targetWeight,
-          targetUnit: progress[0].targetUnit,
-        });
-      }
+      const next = computeNextSet(progress, null);
+      setActiveSet(next);
     },
     []
   );
@@ -131,16 +217,16 @@ export function useWorkoutSession() {
       exerciseName: activeSet.exerciseName,
     };
     setCompletedSets((prev) => [newCompleted, ...prev]);
-    setExerciseProgress((prev) =>
-      prev.map((ep) =>
-        ep.workoutExerciseId === activeSet.workoutExerciseId
-          ? { ...ep, completedSets: ep.completedSets + 1 }
-          : ep
-      )
+
+    const updatedProgress = exerciseProgress.map((ep) =>
+      ep.workoutExerciseId === activeSet.workoutExerciseId
+        ? { ...ep, completedSets: ep.completedSets + 1 }
+        : ep
     );
-    setActiveSet(null);
+    setExerciseProgress(updatedProgress);
+    setActiveSet(computeNextSet(updatedProgress, activeSet.workoutExerciseId));
     resetStopwatch();
-  }, [sessionId, activeSet, resetStopwatch]);
+  }, [sessionId, activeSet, exerciseProgress, resetStopwatch]);
 
   const recordDeviation = useCallback(
     async (actualReps: number, actualWeight: number | null) => {
@@ -173,17 +259,17 @@ export function useWorkoutSession() {
         exerciseName: activeSet.exerciseName,
       };
       setCompletedSets((prev) => [newCompleted, ...prev]);
-      setExerciseProgress((prev) =>
-        prev.map((ep) =>
-          ep.workoutExerciseId === activeSet.workoutExerciseId
-            ? { ...ep, completedSets: ep.completedSets + 1 }
-            : ep
-        )
+
+      const updatedProgress = exerciseProgress.map((ep) =>
+        ep.workoutExerciseId === activeSet.workoutExerciseId
+          ? { ...ep, completedSets: ep.completedSets + 1 }
+          : ep
       );
-      setActiveSet(null);
+      setExerciseProgress(updatedProgress);
+      setActiveSet(computeNextSet(updatedProgress, activeSet.workoutExerciseId));
       resetStopwatch();
     },
-    [sessionId, activeSet, resetStopwatch]
+    [sessionId, activeSet, exerciseProgress, resetStopwatch]
   );
 
   const selectNextSet = useCallback(
@@ -204,6 +290,8 @@ export function useWorkoutSession() {
     },
     [exerciseProgress]
   );
+
+  const clearActiveSet = useCallback(() => setActiveSet(null), []);
 
   const endSession = useCallback(async () => {
     if (!sessionId) return;
@@ -230,6 +318,7 @@ export function useWorkoutSession() {
     totalSetsPlanned,
     startedAt,
     isComplete,
+    isResuming,
     remainingExercises,
     stopwatchMs,
     stopwatchRunning,
@@ -237,6 +326,7 @@ export function useWorkoutSession() {
     confirmExpected,
     recordDeviation,
     selectNextSet,
+    clearActiveSet,
     endSession,
     startStopwatch,
     pauseStopwatch,

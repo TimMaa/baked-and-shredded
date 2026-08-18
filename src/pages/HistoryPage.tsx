@@ -4,7 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Trash2 } from "lucide-react";
+import { Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import * as db from "@/lib/db";
+import type { SessionSet } from "@/types";
 
 const ranges: { value: DateRange; label: string }[] = [
   { value: "all", label: "All time" },
@@ -28,6 +30,24 @@ function formatDuration(seconds: number): string {
 export function HistoryPage() {
   const [range, setRange] = useState<DateRange>("all");
   const { sessions, workoutAnalytics, exerciseAnalytics, loading, removeSession } = useHistory(range);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedSets, setExpandedSets] = useState<(SessionSet & { exerciseName: string })[]>([]);
+
+  const toggleExpand = async (sessionId: number) => {
+    if (expandedId === sessionId) {
+      setExpandedId(null);
+      setExpandedSets([]);
+      return;
+    }
+    const sets = await db.getSessionSets(sessionId);
+    const allExercises = await db.getAllExercises();
+    const exerciseMap = new Map(allExercises.map((e) => [e.id!, e.name]));
+    const enriched = sets
+      .sort((a, b) => a.setNumber - b.setNumber)
+      .map((s) => ({ ...s, exerciseName: exerciseMap.get(s.exerciseId) || "Unknown" }));
+    setExpandedSets(enriched);
+    setExpandedId(sessionId);
+  };
 
   const totalSessions = sessions.length;
   const totalSets = sessions.reduce((s, sess) => s + sess.setsCompleted, 0);
@@ -99,7 +119,10 @@ export function HistoryPage() {
             {sessions.map((s) => (
               <Card key={s.sessionId} size="sm">
                 <CardContent className="pt-3">
-                  <div className="flex items-start justify-between">
+                  <div
+                    className="flex items-start justify-between cursor-pointer"
+                    onClick={() => toggleExpand(s.sessionId)}
+                  >
                     <div>
                       <p className="text-sm font-medium">{s.workoutName}</p>
                       <p className="text-xs text-muted-foreground">
@@ -108,10 +131,13 @@ export function HistoryPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       {adherenceBadge(s.adherenceRatePct)}
+                      {expandedId === s.sessionId
+                        ? <ChevronUp className="size-4 text-muted-foreground" />
+                        : <ChevronDown className="size-4 text-muted-foreground" />}
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        onClick={() => { if (confirm("Delete session?")) removeSession(s.sessionId); }}
+                        onClick={(e) => { e.stopPropagation(); if (confirm("Delete session?")) removeSession(s.sessionId); }}
                       >
                         <Trash2 className="size-3" />
                       </Button>
@@ -135,6 +161,43 @@ export function HistoryPage() {
                       <p className="text-muted-foreground">Deviation</p>
                     </div>
                   </div>
+
+                  {expandedId === s.sessionId && expandedSets.length > 0 && (
+                    <div className="mt-3 border-t pt-3 space-y-2">
+                      {Object.entries(
+                        expandedSets.reduce<Record<string, (SessionSet & { exerciseName: string })[]>>(
+                          (acc, set) => {
+                            const key = set.exerciseName;
+                            if (!acc[key]) acc[key] = [];
+                            acc[key].push(set);
+                            return acc;
+                          },
+                          {}
+                        )
+                      ).map(([name, sets]) => (
+                        <div key={name}>
+                          <p className="text-xs font-medium mb-1">{name}</p>
+                          <div className="space-y-0.5 ml-2">
+                            {sets.map((set) => (
+                              <div key={set.id} className="flex items-center gap-2 text-xs">
+                                <span className="text-muted-foreground w-10">Set {set.setNumber}</span>
+                                <span className="tabular-nums">
+                                  {set.targetUnit === "s"
+                                    ? `${set.actualWeight}s`
+                                    : `${set.actualReps} reps${set.actualWeight ? ` @ ${set.actualWeight}kg` : ""}`}
+                                </span>
+                                {set.status === "expected" ? (
+                                  <Badge className="bg-success/20 text-success text-[10px] px-1 py-0">ok</Badge>
+                                ) : (
+                                  <Badge className="bg-warning/20 text-warning text-[10px] px-1 py-0">dev</Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

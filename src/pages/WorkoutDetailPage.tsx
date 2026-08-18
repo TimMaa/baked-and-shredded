@@ -7,14 +7,14 @@ import { Input } from "@/components/ui/input";
 import { MuscleGroupCoverage } from "@/components/workouts/MuscleGroupCoverage";
 import { ExerciseSelector } from "@/components/workouts/ExerciseSelector";
 import type { Exercise } from "@/types";
-import { ArrowLeft, Plus, Trash2, GripVertical, ChevronUp, ChevronDown, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, ChevronUp, ChevronDown, Pencil, Check, X } from "lucide-react";
 
 export function WorkoutDetailPage() {
   const { id } = useParams();
   const workoutId = id ? Number(id) : undefined;
   const {
     workout, exercises, allExercises, focusAreas, loading,
-    updateWorkout, addExercise, removeExercise, reorder,
+    updateWorkout, addExercise, removeExercise, updateExerciseParams, reorder,
   } = useWorkoutDetail(workoutId);
 
   const [editing, setEditing] = useState(false);
@@ -27,6 +27,11 @@ export function WorkoutDetailPage() {
   const [weight, setWeight] = useState("");
   const [unit, setUnit] = useState<"kg" | "s">("kg");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [editingExId, setEditingExId] = useState<number | null>(null);
+  const [editSets, setEditSets] = useState("");
+  const [editReps, setEditReps] = useState("");
+  const [editWeight, setEditWeight] = useState("");
+  const [editUnit, setEditUnit] = useState<"kg" | "s">("kg");
 
   if (loading || !workout) {
     return <div className="text-center text-muted-foreground">Loading...</div>;
@@ -83,6 +88,26 @@ export function WorkoutDetailPage() {
     ids.splice(dropIndex, 0, moved);
     setDragIndex(null);
     await reorder(ids);
+  };
+
+  const startEditExercise = (we: typeof exercises[0]) => {
+    setEditingExId(we.id!);
+    setEditSets(String(we.sets));
+    setEditReps(String(we.targetReps));
+    setEditWeight(we.targetWeight != null ? String(we.targetWeight) : "");
+    setEditUnit(we.targetUnit);
+  };
+
+  const saveEditExercise = async () => {
+    if (editingExId === null) return;
+    await updateExerciseParams(
+      editingExId,
+      Number(editSets) || 3,
+      editUnit === "s" ? 1 : Number(editReps) || 10,
+      editWeight ? Number(editWeight) : null,
+      editUnit
+    );
+    setEditingExId(null);
   };
 
   return (
@@ -210,32 +235,86 @@ export function WorkoutDetailPage() {
               </span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{we.exerciseName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {we.sets} sets &times;{" "}
-                  {we.targetUnit === "s"
-                    ? `${we.targetWeight || 0}s`
-                    : `${we.targetReps} reps${we.targetWeight ? ` @ ${we.targetWeight}kg` : ""}`}
-                </p>
+                {editingExId !== we.id && (
+                  <p className="text-xs text-muted-foreground">
+                    {we.sets} sets &times;{" "}
+                    {we.targetUnit === "s"
+                      ? `${we.targetWeight || 0}s`
+                      : `${we.targetReps} reps${we.targetWeight ? ` @ ${we.targetWeight}kg` : ""}`}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-0.5">
-                <Button variant="ghost" size="icon-xs" onClick={() => moveUp(i)} disabled={i === 0}>
-                  <ChevronUp className="size-3" />
-                </Button>
-                <Button variant="ghost" size="icon-xs" onClick={() => moveDown(i)} disabled={i === exercises.length - 1}>
-                  <ChevronDown className="size-3" />
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="icon-xs"
-                  onClick={() => { if (confirm("Remove?")) removeExercise(we.id!); }}
-                >
-                  <Trash2 className="size-3" />
-                </Button>
+                {editingExId !== we.id && (
+                  <>
+                    <Button variant="ghost" size="icon-xs" onClick={() => startEditExercise(we)}>
+                      <Pencil className="size-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon-xs" onClick={() => moveUp(i)} disabled={i === 0}>
+                      <ChevronUp className="size-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon-xs" onClick={() => moveDown(i)} disabled={i === exercises.length - 1}>
+                      <ChevronDown className="size-3" />
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="icon-xs"
+                      onClick={() => { if (confirm("Remove?")) removeExercise(we.id!); }}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
-            <div className="mt-2 ml-11">
-              <MuscleGroupCoverage ratings={we.focusAreas} compact />
-            </div>
+
+            {editingExId === we.id && (
+              <div className="mt-2 ml-11 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Sets</label>
+                    <Input value={editSets} onChange={(e) => setEditSets(e.target.value)} type="number" />
+                  </div>
+                  {editUnit === "kg" && (
+                    <div>
+                      <label className="text-xs text-muted-foreground">Reps</label>
+                      <Input value={editReps} onChange={(e) => setEditReps(e.target.value)} type="number" />
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      {editUnit === "kg" ? "Weight (kg)" : "Time (s)"}
+                    </label>
+                    <Input value={editWeight} onChange={(e) => setEditWeight(e.target.value)} type="number" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Unit</label>
+                    <select
+                      value={editUnit}
+                      onChange={(e) => setEditUnit(e.target.value as "kg" | "s")}
+                      className="w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+                    >
+                      <option value="kg">Weight (kg)</option>
+                      <option value="s">Time (s)</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={saveEditExercise} className="flex-1">
+                    <Check className="size-3" /> Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingExId(null)}>
+                    <X className="size-3" /> Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {editingExId !== we.id && (
+              <div className="mt-2 ml-11">
+                <MuscleGroupCoverage ratings={we.focusAreas} compact />
+              </div>
+            )}
           </div>
         ))}
         {exercises.length === 0 && (

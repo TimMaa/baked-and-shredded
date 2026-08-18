@@ -93,6 +93,28 @@ export function useWorkoutDetail(id: number | undefined) {
     [refresh]
   );
 
+  const updateExerciseParams = useCallback(
+    async (
+      weId: number,
+      sets: number,
+      targetReps: number,
+      targetWeight: number | null,
+      targetUnit: "kg" | "s"
+    ) => {
+      const existing = exercises.find((e) => e.id === weId);
+      if (!existing) return;
+      await db.updateWorkoutExercise({
+        ...existing,
+        sets,
+        targetReps,
+        targetWeight,
+        targetUnit,
+      });
+      await refresh();
+    },
+    [exercises, refresh]
+  );
+
   const reorder = useCallback(
     async (orderedIds: number[]) => {
       if (!id) return;
@@ -112,6 +134,7 @@ export function useWorkoutDetail(id: number | undefined) {
     updateWorkout,
     addExercise,
     removeExercise,
+    updateExerciseParams,
     reorder,
   };
 }

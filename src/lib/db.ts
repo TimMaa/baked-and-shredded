@@ -187,6 +187,11 @@ export async function deleteWorkoutExercise(id: number): Promise<void> {
   await db.delete("workoutExercises", id);
 }
 
+export async function updateWorkoutExercise(we: WorkoutExercise): Promise<void> {
+  const db = await getDb();
+  await db.put("workoutExercises", we);
+}
+
 export async function reorderWorkoutExercises(
   workoutId: number,
   orderedIds: number[]
@@ -259,6 +264,14 @@ export async function logSessionSet(
 export async function getSessionSets(sessionId: number): Promise<SessionSet[]> {
   const db = await getDb();
   return db.getAllFromIndex("sessionSets", "bySession", sessionId);
+}
+
+// --- Active Session ---
+
+export async function getActiveSession(): Promise<Session | undefined> {
+  const db = await getDb();
+  const all = await db.getAll("sessions");
+  return all.find((s) => s.completedAt === null);
 }
 
 // --- Analytics ---

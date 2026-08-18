@@ -5,10 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SessionStopwatch, formatStopwatchTime } from "@/components/sessions/SessionStopwatch";
 import * as db from "@/lib/db";
 import type { Workout, WorkoutExercise, Exercise } from "@/types";
-import { Play, Square, ChevronRight, Check, AlertTriangle, BarChart3 } from "lucide-react";
+import { Play, Square, Check, AlertTriangle, BarChart3, Shuffle } from "lucide-react";
 
 interface WorkoutOption extends Workout {
   exercises: (WorkoutExercise & { exerciseName: string })[];
@@ -21,10 +29,12 @@ export function ExecutePage() {
   const [showDeviation, setShowDeviation] = useState(false);
   const [deviationReps, setDeviationReps] = useState("");
   const [deviationWeight, setDeviationWeight] = useState("");
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
 
   const {
     sessionId, activeSet, completedSets,
-    totalSetsPlanned, startedAt, isComplete, remainingExercises,
+    totalSetsPlanned, startedAt, isComplete, isResuming, remainingExercises,
     stopwatchMs, stopwatchRunning,
     startSession, confirmExpected, recordDeviation, selectNextSet, endSession,
     startStopwatch, pauseStopwatch, resetStopwatch,
@@ -60,6 +70,7 @@ export function ExecutePage() {
   const handleConfirmExpected = async () => {
     await confirmExpected();
     setShowDeviation(false);
+    setShowExercisePicker(false);
   };
 
   const handleDeviation = async () => {
@@ -67,6 +78,7 @@ export function ExecutePage() {
     const weight = deviationWeight ? Number(deviationWeight) : activeSet!.targetWeight;
     await recordDeviation(reps, weight);
     setShowDeviation(false);
+    setShowExercisePicker(false);
     setDeviationReps("");
     setDeviationWeight("");
   };
@@ -75,7 +87,23 @@ export function ExecutePage() {
     const seconds = Math.round(stopwatchMs / 1000);
     await recordDeviation(1, seconds);
     setShowDeviation(false);
+    setShowExercisePicker(false);
   };
+
+  const handleEndSession = async () => {
+    await endSession();
+    setShowEndConfirm(false);
+  };
+
+  const handleSwitchExercise = (workoutExerciseId: number) => {
+    selectNextSet(workoutExerciseId);
+    setShowExercisePicker(false);
+  };
+
+  // Loading / resuming state
+  if (isResuming) {
+    return <div className="text-center text-muted-foreground py-8">Resuming session...</div>;
+  }
 
   // Pre-session state
   if (!sessionId) {
@@ -149,7 +177,7 @@ export function ExecutePage() {
             </p>
           )}
         </div>
-        <Button variant="destructive" size="sm" onClick={endSession}>
+        <Button variant="destructive" size="sm" onClick={isComplete ? handleEndSession : () => setShowEndConfirm(true)}>
           <Square className="size-3" /> End
         </Button>
       </div>
@@ -202,7 +230,7 @@ export function ExecutePage() {
 
             <div className="flex gap-2">
               <Button onClick={handleConfirmExpected} className="flex-1">
-                <Check className="size-3.5" /> Confirm Expected
+                <Check className="size-3.5" /> Confirm
               </Button>
               {activeSet.targetUnit === "s" && stopwatchMs > 0 && (
                 <Button variant="secondary" onClick={handleStopwatchComplete}>
@@ -248,27 +276,48 @@ export function ExecutePage() {
                 </Button>
               </div>
             )}
+
+            {/* Switch exercise — only show if there are other exercises to pick */}
+            {remainingExercises.length > 1 && (
+              <button
+                onClick={() => setShowExercisePicker(!showExercisePicker)}
+                className="flex w-full items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+              >
+                <Shuffle className="size-3" /> Switch exercise
+              </button>
+            )}
+
+            {showExercisePicker && (
+              <div className="flex flex-wrap gap-1.5">
+                {remainingExercises
+                  .filter((ep) => ep.workoutExerciseId !== activeSet.workoutExerciseId)
+                  .map((ep) => (
+                    <button
+                      key={ep.workoutExerciseId}
+                      onClick={() => handleSwitchExercise(ep.workoutExerciseId)}
+                      className="rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent hover:border-primary"
+                    >
+                      {ep.exerciseName} ({ep.completedSets}/{ep.totalSets})
+                    </button>
+                  ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
+      {/* Fallback picker when no active set and not complete */}
       {!activeSet && !isComplete && remainingExercises.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="text-sm">Next Set</CardTitle></CardHeader>
-          <CardContent className="space-y-1.5">
+          <CardHeader><CardTitle className="text-sm">Choose Next Exercise</CardTitle></CardHeader>
+          <CardContent className="flex flex-wrap gap-1.5">
             {remainingExercises.map((ep) => (
               <button
                 key={ep.workoutExerciseId}
                 onClick={() => selectNextSet(ep.workoutExerciseId)}
-                className="flex w-full items-center justify-between rounded-md border p-2.5 text-left transition-colors hover:bg-accent"
+                className="rounded-full border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent hover:border-primary"
               >
-                <div>
-                  <p className="text-sm font-medium">{ep.exerciseName}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {ep.completedSets}/{ep.totalSets} sets done
-                  </p>
-                </div>
-                <ChevronRight className="size-4 text-muted-foreground" />
+                {ep.exerciseName} ({ep.completedSets}/{ep.totalSets})
               </button>
             ))}
           </CardContent>
@@ -291,6 +340,27 @@ export function ExecutePage() {
           ))}
         </div>
       )}
+
+      {/* End session confirmation dialog */}
+      <Dialog open={showEndConfirm} onOpenChange={setShowEndConfirm}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>End Session?</DialogTitle>
+            <DialogDescription>
+              You've completed {setsCompleted} of {totalSetsPlanned} sets.
+              This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEndConfirm(false)}>
+              Continue Training
+            </Button>
+            <Button variant="destructive" onClick={handleEndSession}>
+              End Session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
