@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { MuscleGroupSelector } from "@/components/workouts/MuscleGroupSelector";
 import { MuscleGroupCoverage } from "@/components/workouts/MuscleGroupCoverage";
 import { createDefaultMuscleRatings } from "@/lib/muscleGroups";
+import * as gemini from "@/lib/gemini";
 import type { Exercise, MuscleRatings } from "@/types";
-import { Plus, Pencil, Trash2, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, Sparkles } from "lucide-react";
 
 export function ExercisesPage() {
   const { exercises, loading, create, update, remove } = useExercises();
@@ -17,7 +18,22 @@ export function ExercisesPage() {
   const [description, setDescription] = useState("");
   const [tip, setTip] = useState("");
   const [muscleRatings, setMuscleRatings] = useState<MuscleRatings>(createDefaultMuscleRatings());
+  const [classifying, setClassifying] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleAiFill = async () => {
+    if (!name.trim() || !gemini.isConfigured()) return;
+    setClassifying(true);
+    try {
+      const result = await gemini.classifyExercise(name.trim());
+      setDescription(result.description);
+      setTip(result.tip);
+      setMuscleRatings(result.focusAreas);
+    } catch {
+      // silently fail — user can still fill manually
+    }
+    setClassifying(false);
+  };
 
   const resetForm = () => {
     setName("");
@@ -120,7 +136,21 @@ export function ExercisesPage() {
             <CardTitle>{editingId ? "Edit Exercise" : "New Exercise"}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+            <div className="flex gap-2">
+              <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} className="flex-1" />
+              {gemini.isConfigured() && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAiFill}
+                  disabled={!name.trim() || classifying}
+                  className="shrink-0"
+                >
+                  <Sparkles className="size-3.5" />
+                  {classifying ? "..." : "AI Fill"}
+                </Button>
+              )}
+            </div>
             <textarea
               placeholder="Description (optional)"
               value={description}

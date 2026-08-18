@@ -1,17 +1,24 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useWorkouts } from "@/hooks/useWorkouts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { MuscleGroupCoverage } from "@/components/workouts/MuscleGroupCoverage";
-import { Plus, Trash2 } from "lucide-react";
+import * as gemini from "@/lib/gemini";
+import * as db from "@/lib/db";
+import { ratedMuscleGroups } from "@/lib/muscleGroups";
+import { Plus, Trash2, Sparkles } from "lucide-react";
 
 export function WorkoutsPage() {
-  const { workouts, loading, create, remove } = useWorkouts();
+  const { workouts, loading, create, remove, refresh } = useWorkouts();
+  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [generatingAi, setGeneratingAi] = useState(false);
+  const [showAiBuilder, setShowAiBuilder] = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -19,6 +26,54 @@ export function WorkoutsPage() {
     setName("");
     setDescription("");
     setShowForm(false);
+  };
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return;
+    setGeneratingAi(true);
+    try {
+      const allExercises = await db.getAllExercises();
+      if (allExercises.length === 0) {
+        setGeneratingAi(false);
+        return;
+      }
+      const availableExercises = allExercises.map((e) => ({
+        id: e.id!,
+        name: e.name,
+        muscleGroups: ratedMuscleGroups(e.focusAreas),
+      }));
+
+      const result = await gemini.generateWorkout({
+        prompt: aiPrompt.trim(),
+        availableExercises,
+      });
+
+      const workoutId = await db.createWorkout({
+        name: result.name,
+        description: result.description || null,
+      });
+
+      for (let i = 0; i < result.exercises.length; i++) {
+        const ex = result.exercises[i];
+        await db.addWorkoutExercise({
+          workoutId,
+          exerciseId: ex.exerciseId,
+          sets: ex.sets,
+          targetReps: ex.targetReps,
+          targetWeight: ex.targetWeight,
+          targetUnit: ex.targetUnit,
+          orderIndex: i,
+        });
+      }
+
+      setAiPrompt("");
+      setShowAiBuilder(false);
+      await refresh();
+      navigate(`/workouts/${workoutId}`);
+    } catch {
+      // silently fail
+    }
+    setGeneratingAi(false);
   };
 
   if (loading) {
@@ -37,6 +92,48 @@ export function WorkoutsPage() {
           Create
         </Button>
       </div>
+
+      {gemini.isConfigured() && (
+        <div>
+          {showAiBuilder ? (
+            <Card className="border-primary/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-1.5 text-sm">
+                  <Sparkles className="size-3.5" /> AI Workout Builder
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <textarea
+                  placeholder="Describe the workout you want, e.g. &quot;Upper body push day, 45 minutes, focus on chest and shoulders&quot;"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  className="w-full rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  rows={2}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleAiGenerate}
+                    disabled={!aiPrompt.trim() || generatingAi}
+                    className="flex-1"
+                  >
+                    <Sparkles className="size-3.5" />
+                    {generatingAi ? "Generating..." : "Generate Workout"}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setShowAiBuilder(false)}>Cancel</Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setShowAiBuilder(true)}
+            >
+              <Sparkles className="size-3.5" /> Build with AI
+            </Button>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <Card>

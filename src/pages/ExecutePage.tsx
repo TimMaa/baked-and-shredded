@@ -15,8 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { SessionStopwatch, formatStopwatchTime } from "@/components/sessions/SessionStopwatch";
 import * as db from "@/lib/db";
+import * as gemini from "@/lib/gemini";
 import type { Workout, WorkoutExercise, Exercise } from "@/types";
-import { Play, Square, Check, AlertTriangle, BarChart3, Shuffle } from "lucide-react";
+import { ratedMuscleGroups } from "@/lib/muscleGroups";
+import { Play, Square, Check, AlertTriangle, BarChart3, Shuffle, Sparkles } from "lucide-react";
 
 interface WorkoutOption extends Workout {
   exercises: (WorkoutExercise & { exerciseName: string })[];
@@ -31,6 +33,8 @@ export function ExecutePage() {
   const [deviationWeight, setDeviationWeight] = useState("");
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [recommendation, setRecommendation] = useState<{ workoutId: number; reason: string } | null>(null);
+  const [loadingRec, setLoadingRec] = useState(false);
 
   const {
     sessionId, activeSet, completedSets,
@@ -100,6 +104,46 @@ export function ExecutePage() {
     setShowExercisePicker(false);
   };
 
+  const handleGetRecommendation = async () => {
+    if (workouts.length === 0) return;
+    setLoadingRec(true);
+    try {
+      const allExercises = await db.getAllExercises();
+      const allSessions = await db.getAllSessions();
+      const allWorkouts = await db.getAllWorkouts();
+
+      const workoutInputs = await Promise.all(
+        workouts.map(async (w) => {
+          const wes = await db.getWorkoutExercises(w.id!);
+          const muscleGroups = [...new Set(
+            wes.flatMap((we) => {
+              const ex = allExercises.find((e) => e.id === we.exerciseId);
+              return ex ? ratedMuscleGroups(ex.focusAreas) : [];
+            })
+          )];
+          return { id: w.id!, name: w.name, muscleGroups };
+        })
+      );
+
+      const now = Date.now();
+      const recentSessions = allSessions
+        .filter((s) => s.completedAt)
+        .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+        .slice(0, 10)
+        .map((s) => ({
+          workoutName: allWorkouts.find((w) => w.id === s.workoutId)?.name || "Unknown",
+          daysAgo: Math.round((now - new Date(s.startedAt).getTime()) / 86400000),
+        }));
+
+      const rec = await gemini.suggestNextWorkout({ workouts: workoutInputs, recentSessions });
+      setRecommendation(rec);
+      setSelectedWorkoutId(rec.workoutId);
+    } catch {
+      // silently fail
+    }
+    setLoadingRec(false);
+  };
+
   // Loading / resuming state
   if (isResuming) {
     return <div className="text-center text-muted-foreground py-8">Resuming session...</div>;
@@ -121,6 +165,29 @@ export function ExecutePage() {
         <Card>
           <CardHeader><CardTitle>Select Workout</CardTitle></CardHeader>
           <CardContent className="space-y-2">
+            {gemini.isConfigured() && workouts.length > 0 && (
+              <div className="mb-3">
+                {recommendation ? (
+                  <div className="rounded-md border border-primary/30 bg-primary/5 p-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                      <Sparkles className="size-3" /> AI Recommendation
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{recommendation.reason}</p>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={handleGetRecommendation}
+                    disabled={loadingRec}
+                  >
+                    <Sparkles className="size-3.5" />
+                    {loadingRec ? "Thinking..." : "What should I train?"}
+                  </Button>
+                )}
+              </div>
+            )}
             {workouts.map((w) => (
               <label
                 key={w.id}
