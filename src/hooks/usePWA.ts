@@ -7,75 +7,66 @@ interface BeforeInstallPromptEvent extends Event {
 
 export function usePWA() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
   const [hasUpdate, setHasUpdate] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    const handleBeforeInstall = (e: Event) => {
+    function handleBeforeInstall(e: Event) {
       e.preventDefault();
       setInstallPrompt(e as BeforeInstallPromptEvent);
-    };
-
-    const handleAppInstalled = () => {
-      setIsInstalled(true);
-      setInstallPrompt(null);
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
-    window.addEventListener("appinstalled", handleAppInstalled);
-
-    if (window.matchMedia("(display-mode: standalone)").matches) {
-      setIsInstalled(true);
+      setCanInstall(true);
     }
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    window.addEventListener("appinstalled", () => setCanInstall(false));
 
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
-      window.removeEventListener("appinstalled", handleAppInstalled);
-    };
-  }, []);
+    function handleOnline() { setIsOnline(true); }
+    function handleOffline() { setIsOnline(false); }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
-  useEffect(() => {
-    const online = () => setIsOnline(true);
-    const offline = () => setIsOnline(false);
-    window.addEventListener("online", online);
-    window.addEventListener("offline", offline);
-    return () => {
-      window.removeEventListener("online", online);
-      window.removeEventListener("offline", offline);
-    };
-  }, []);
-
-  useEffect(() => {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.ready.then((reg) => {
         reg.addEventListener("updatefound", () => {
           const newWorker = reg.installing;
-          if (newWorker) {
-            newWorker.addEventListener("statechange", () => {
-              if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-                setHasUpdate(true);
-              }
-            });
-          }
+          if (!newWorker) return;
+          newWorker.addEventListener("statechange", () => {
+            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+              setHasUpdate(true);
+            }
+          });
         });
       });
     }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, []);
 
   const promptInstall = useCallback(async () => {
     if (!installPrompt) return;
     await installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === "accepted") setCanInstall(false);
     setInstallPrompt(null);
   }, [installPrompt]);
 
-  const applyUpdate = useCallback(() => {
-    window.location.reload();
+  const applyUpdate = useCallback(async () => {
+    const reg = await navigator.serviceWorker.ready;
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+    }
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      window.location.reload();
+    });
   }, []);
 
   return {
-    canInstall: !!installPrompt,
-    isInstalled,
+    canInstall,
+    isInstalled: !canInstall && window.matchMedia("(display-mode: standalone)").matches,
     hasUpdate,
     isOnline,
     promptInstall,

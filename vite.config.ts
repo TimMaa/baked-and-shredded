@@ -12,11 +12,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      registerType: "autoUpdate",
       strategies: "injectManifest",
       srcDir: "src/sw",
       filename: "service-worker.ts",
-      injectRegister: "auto",
+      includeAssets: ["favicon.png", "icon-*.png"],
       manifest: {
+        id: "/",
         name: "Baked & Shredded",
         short_name: "Baked",
         description: "Personal workout tracker",
@@ -24,12 +26,17 @@ export default defineConfig({
         background_color: "#1a1410",
         display: "standalone",
         orientation: "portrait",
+        start_url: "/",
+        scope: "/",
         icons: [
           { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
-      devOptions: { enabled: false },
+      injectManifest: {
+        globPatterns: ["**/*.{js,css,html,png,woff2}"],
+      },
     }),
   ],
   resolve: {
