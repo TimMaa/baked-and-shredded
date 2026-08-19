@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AppShell } from "@/components/layout/AppShell";
@@ -11,13 +10,7 @@ import { HistoryPage } from "@/pages/HistoryPage";
 import { usePWA } from "@/hooks/usePWA";
 
 export default function App() {
-  const { canInstall, promptInstall, hasUpdate, applyUpdate, isOnline } = usePWA();
-
-  useEffect(() => {
-    if (hasUpdate) {
-      applyUpdate();
-    }
-  }, [hasUpdate, applyUpdate]);
+  const { canInstall, promptInstall, isOnline } = usePWA();
 
   return (
     <ThemeProvider attribute="class" defaultTheme="light">
