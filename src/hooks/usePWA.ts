@@ -27,6 +27,11 @@ export function usePWA() {
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.ready.then((reg) => {
+        // If a new SW is already waiting (installed while app was closed), activate it
+        if (reg.waiting) {
+          setHasUpdate(true);
+        }
+
         reg.addEventListener("updatefound", () => {
           const newWorker = reg.installing;
           if (!newWorker) return;
@@ -36,6 +41,15 @@ export function usePWA() {
             }
           });
         });
+
+        // Check for updates periodically (every 60s) and on visibility change
+        const checkUpdate = () => reg.update().catch(() => {});
+        const interval = setInterval(checkUpdate, 60 * 1000);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") checkUpdate();
+        });
+
+        return () => clearInterval(interval);
       });
     }
 
