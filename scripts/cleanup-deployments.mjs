@@ -29,14 +29,19 @@ async function main() {
   console.log(`Deleting ${toDelete.length} old deployment(s)...`);
 
   for (const dep of toDelete) {
+    const id = dep.Id || dep.id;
+    if (!id) {
+      console.error("  Skipping deployment with no ID:", JSON.stringify(dep));
+      continue;
+    }
     try {
       execSync(
-        `npx wrangler pages deployment delete --project-name ${PROJECT} ${dep.id} --yes`,
+        `npx wrangler pages deployment delete ${id} --project-name ${PROJECT} --force`,
         { encoding: "utf-8", stdio: "pipe" }
       );
-      console.log(`  Deleted: ${dep.id}`);
+      console.log(`  Deleted: ${id}`);
     } catch (e) {
-      console.error(`  Failed to delete ${dep.id}: ${e.message}`);
+      console.error(`  Failed to delete ${id}: ${e.message}`);
     }
   }
 }
