@@ -10,7 +10,7 @@ import { HistoryPage } from "@/pages/HistoryPage";
 import { usePWA } from "@/hooks/usePWA";
 
 export default function App() {
-  const { canInstall, promptInstall, isOnline } = usePWA();
+  const { canInstall, install, updateAvailable, reloadForUpdate, isOnline } = usePWA();
 
   return (
     <ThemeProvider attribute="class" defaultTheme="light">
@@ -21,10 +21,18 @@ export default function App() {
               You're offline — your data is safe locally
             </div>
           )}
+          {updateAvailable && (
+            <div className="flex items-center justify-between bg-primary px-4 py-2 text-primary-foreground">
+              <span className="text-sm">App update available</span>
+              <button onClick={reloadForUpdate} className="rounded bg-primary-foreground px-3 py-1 text-xs font-medium text-primary">
+                Reload
+              </button>
+            </div>
+          )}
           {canInstall && (
             <div className="flex items-center justify-between bg-primary px-4 py-2 text-primary-foreground">
               <span className="text-sm">Install Baked & Shredded</span>
-              <button onClick={promptInstall} className="rounded bg-primary-foreground px-3 py-1 text-xs font-medium text-primary">
+              <button onClick={install} className="rounded bg-primary-foreground px-3 py-1 text-xs font-medium text-primary">
                 Install
               </button>
             </div>

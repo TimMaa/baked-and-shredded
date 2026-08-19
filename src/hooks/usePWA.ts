@@ -8,6 +8,7 @@ interface BeforeInstallPromptEvent extends Event {
 export function usePWA() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [canInstall, setCanInstall] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -25,17 +26,15 @@ export function usePWA() {
     window.addEventListener("offline", handleOffline);
 
     if ("serviceWorker" in navigator) {
-      // New SW immediately skipWaiting + clients.claim, so just reload on takeover
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        window.location.reload();
-      });
-
-      // Periodically check for new SW (every 60s) and on visibility change
       navigator.serviceWorker.ready.then((reg) => {
-        const checkUpdate = () => reg.update().catch(() => {});
-        setInterval(checkUpdate, 60 * 1000);
-        document.addEventListener("visibilitychange", () => {
-          if (document.visibilityState === "visible") checkUpdate();
+        reg.addEventListener("updatefound", () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener("statechange", () => {
+            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+              setUpdateAvailable(true);
+            }
+          });
         });
       });
     }
@@ -47,7 +46,7 @@ export function usePWA() {
     };
   }, []);
 
-  const promptInstall = useCallback(async () => {
+  const install = useCallback(async () => {
     if (!installPrompt) return;
     await installPrompt.prompt();
     const { outcome } = await installPrompt.userChoice;
@@ -55,10 +54,15 @@ export function usePWA() {
     setInstallPrompt(null);
   }, [installPrompt]);
 
-  return {
-    canInstall,
-    isInstalled: !canInstall && window.matchMedia("(display-mode: standalone)").matches,
-    isOnline,
-    promptInstall,
-  };
+  const reloadForUpdate = useCallback(async () => {
+    const reg = await navigator.serviceWorker.ready;
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+    }
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      window.location.reload();
+    });
+  }, []);
+
+  return { canInstall, install, updateAvailable, reloadForUpdate, isOnline };
 }
