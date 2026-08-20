@@ -66,6 +66,66 @@ function parseClassification(text: string): ExerciseClassification {
   };
 }
 
+// --- Feature 1b: Bulk Exercise Re-analysis ---
+
+export interface BulkAnalysisResult {
+  exercises: {
+    name: string;
+    description: string;
+    tip: string;
+    focusAreas: MuscleRatings;
+  }[];
+}
+
+export async function reanalyzeExercises(
+  exercises: { id: number; name: string }[]
+): Promise<BulkAnalysisResult> {
+  const client = getClient();
+  const muscleList = ALL_MUSCLE_GROUPS.join(", ");
+
+  const interaction = await client.interactions.create({
+    model: "gemini-3.1-flash-lite",
+    input: [
+      {
+        type: "text",
+        text: `You are a strength and conditioning expert. Analyze these exercises and return improved descriptions, tips, and muscle group ratings.
+
+Exercises:
+${exercises.map((e) => `- "${e.name}"`).join("\n")}
+
+Return ONLY a JSON object (no markdown, no code fences, no explanation):
+{"exercises":[{"name":"<exact name>","description":"One sentence describing the exercise","tip":"One practical form tip","focusAreas":{"Chest":0,"Back":0,...}}]}
+
+focusAreas must include ALL of these muscle groups: ${muscleList}
+Rate each 0-5 (0=not involved, 5=primary mover). Total per exercise should not exceed 25.
+Use the EXACT exercise names as given above.`,
+      },
+    ],
+  });
+
+  const text = (interaction.output_text ?? "").trim();
+  if (!text) throw new Error("Empty response from Gemini");
+
+  const jsonStr = text.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+  const parsed = JSON.parse(jsonStr);
+
+  return {
+    exercises: (parsed.exercises || []).map((ex: any) => {
+      const focusAreas: MuscleRatings = {};
+      for (const group of ALL_MUSCLE_GROUPS) {
+        const val = Number(ex.focusAreas?.[group]);
+        focusAreas[group] = Number.isInteger(val) && val >= 0 && val <= 5 ? val : 0;
+      }
+      return {
+        name: ex.name || "",
+        description: ex.description || "",
+        tip: ex.tip || "",
+        focusAreas,
+      };
+    }),
+  };
+}
+
 // --- Feature 2: Workout Recommendation ---
 
 export interface WorkoutRecommendation {
@@ -187,4 +247,41 @@ Rules:
       targetUnit: e.targetUnit === "s" ? "s" : "kg",
     })),
   };
+}
+
+// --- Feature 4: Activity Classification ---
+
+export async function classifyActivity(
+  name: string
+): Promise<MuscleRatings> {
+  const client = getClient();
+  const muscleList = ALL_MUSCLE_GROUPS.join(", ");
+
+  const interaction = await client.interactions.create({
+    model: "gemini-3.1-flash-lite",
+    input: [
+      {
+        type: "text",
+        text: `You are a sports science expert. For the activity "${name}", estimate which muscle groups are worked and how intensely.
+
+Return ONLY a JSON object (no markdown, no code fences):
+{ "Chest": 0, "Back": 0, ... }
+
+Include ALL of these muscle groups: ${muscleList}
+Rate each 0-5 (0=not involved, 5=heavily worked).
+Consider the activity holistically — e.g. football works quads, hamstrings, calves, glutes, and core significantly.`,
+      },
+    ],
+  });
+
+  const text = (interaction.output_text ?? "").trim();
+  const jsonStr = text.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+  const parsed = JSON.parse(jsonStr);
+
+  const focusAreas: MuscleRatings = {};
+  for (const group of ALL_MUSCLE_GROUPS) {
+    const val = Number(parsed[group]);
+    focusAreas[group] = Number.isInteger(val) && val >= 0 && val <= 5 ? val : 0;
+  }
+  return focusAreas;
 }

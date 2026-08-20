@@ -1,7 +1,22 @@
 import { getDb } from "@/lib/db";
-import type { Exercise, Workout, WorkoutExercise, Session, SessionSet } from "@/types";
+import type { Exercise, Workout, WorkoutExercise, Session, SessionSet, Activity, PersonalRecord, UserPreferences } from "@/types";
 
 interface ExportData {
+  version: 2;
+  exportedAt: string;
+  data: {
+    exercises: Exercise[];
+    workouts: Workout[];
+    workoutExercises: WorkoutExercise[];
+    sessions: Session[];
+    sessionSets: SessionSet[];
+    activities: Activity[];
+    personalRecords: PersonalRecord[];
+    userPreferences: UserPreferences[];
+  };
+}
+
+type LegacyExportData = {
   version: 1;
   exportedAt: string;
   data: {
@@ -11,12 +26,12 @@ interface ExportData {
     sessions: Session[];
     sessionSets: SessionSet[];
   };
-}
+};
 
 export async function exportAllData(): Promise<void> {
   const db = await getDb();
   const payload: ExportData = {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     data: {
       exercises: await db.getAll("exercises"),
@@ -24,6 +39,9 @@ export async function exportAllData(): Promise<void> {
       workoutExercises: await db.getAll("workoutExercises"),
       sessions: await db.getAll("sessions"),
       sessionSets: await db.getAll("sessionSets"),
+      activities: await db.getAll("activities"),
+      personalRecords: await db.getAll("personalRecords"),
+      userPreferences: await db.getAll("userPreferences"),
     },
   };
 
@@ -39,26 +57,28 @@ export async function exportAllData(): Promise<void> {
 export async function importData(file: File): Promise<{ success: boolean; message: string }> {
   try {
     const text = await file.text();
-    const payload: ExportData = JSON.parse(text);
+    const payload: ExportData | LegacyExportData = JSON.parse(text);
 
     if (!payload.version || !payload.data) {
       return { success: false, message: "Invalid export file format" };
     }
 
     const db = await getDb();
-    const tx = db.transaction(
-      ["exercises", "workouts", "workoutExercises", "sessions", "sessionSets"],
-      "readwrite"
-    );
+    const allStores = [
+      "exercises", "workouts", "workoutExercises", "sessions", "sessionSets",
+      "activities", "personalRecords", "userPreferences",
+    ] as const;
+    const tx = db.transaction([...allStores], "readwrite");
 
-    // Clear all stores
     await tx.objectStore("sessionSets").clear();
     await tx.objectStore("sessions").clear();
     await tx.objectStore("workoutExercises").clear();
     await tx.objectStore("workouts").clear();
     await tx.objectStore("exercises").clear();
+    await tx.objectStore("activities").clear();
+    await tx.objectStore("personalRecords").clear();
+    await tx.objectStore("userPreferences").clear();
 
-    // Import in order (respecting references)
     for (const item of payload.data.exercises) {
       await tx.objectStore("exercises").put(item);
     }
@@ -73,6 +93,19 @@ export async function importData(file: File): Promise<{ success: boolean; messag
     }
     for (const item of payload.data.sessionSets) {
       await tx.objectStore("sessionSets").put(item);
+    }
+
+    if (payload.version >= 2) {
+      const v2 = payload as ExportData;
+      for (const item of v2.data.activities ?? []) {
+        await tx.objectStore("activities").put(item);
+      }
+      for (const item of v2.data.personalRecords ?? []) {
+        await tx.objectStore("personalRecords").put(item);
+      }
+      for (const item of v2.data.userPreferences ?? []) {
+        await tx.objectStore("userPreferences").put(item);
+      }
     }
 
     await tx.done;

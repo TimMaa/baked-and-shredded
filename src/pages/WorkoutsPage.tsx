@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useWorkouts } from "@/hooks/useWorkouts";
 import { Button } from "@/components/ui/button";
@@ -8,24 +8,29 @@ import { MuscleGroupCoverage } from "@/components/workouts/MuscleGroupCoverage";
 import * as gemini from "@/lib/gemini";
 import * as db from "@/lib/db";
 import { ratedMuscleGroups } from "@/lib/muscleGroups";
-import { Plus, Trash2, Sparkles } from "lucide-react";
+import type { Session } from "@/types";
+import { Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 
 export function WorkoutsPage() {
   const { workouts, loading, create, remove, refresh } = useWorkouts();
   const navigate = useNavigate();
-  const [showForm, setShowForm] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [aiPrompt, setAiPrompt] = useState("");
   const [generatingAi, setGeneratingAi] = useState(false);
-  const [showAiBuilder, setShowAiBuilder] = useState(false);
+  const [sessions, setSessions] = useState<Session[]>([]);
+
+  useEffect(() => {
+    db.getAllSessions().then(setSessions);
+  }, []);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
     await create({ name: name.trim(), description: description.trim() || null });
     setName("");
     setDescription("");
-    setShowForm(false);
+    setShowManualForm(false);
   };
 
   const handleAiGenerate = async () => {
@@ -67,13 +72,22 @@ export function WorkoutsPage() {
       }
 
       setAiPrompt("");
-      setShowAiBuilder(false);
       await refresh();
-      navigate(`/workouts/${workoutId}`);
+      navigate(`/library/workout/${workoutId}`);
     } catch {
       // silently fail
     }
     setGeneratingAi(false);
+  };
+
+  const getLastTrained = (workoutId: number): string | null => {
+    const workoutSessions = sessions
+      .filter((s) => s.workoutId === workoutId && s.completedAt)
+      .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime());
+    if (workoutSessions.length === 0) return null;
+    const days = Math.round((Date.now() - new Date(workoutSessions[0].completedAt!).getTime()) / 86400000);
+    if (days === 0) return "today";
+    return `${days}d ago`;
   };
 
   if (loading) {
@@ -81,64 +95,50 @@ export function WorkoutsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Workouts</h1>
-          <p className="text-sm text-muted-foreground">Your workout plans</p>
-        </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="size-4" />
-          Create
+        <p className="text-sm text-muted-foreground">{workouts.length} workouts</p>
+        <Button variant="outline" size="sm" onClick={() => setShowManualForm(!showManualForm)}>
+          <Plus className="size-3.5" />
+          Manual
         </Button>
       </div>
 
+      {/* AI Builder — default/prominent */}
       {gemini.isConfigured() && (
-        <div>
-          {showAiBuilder ? (
-            <Card className="border-primary/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-1.5 text-sm">
-                  <Sparkles className="size-3.5" /> AI Workout Builder
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <textarea
-                  placeholder="Describe the workout you want, e.g. &quot;Upper body push day, 45 minutes, focus on chest and shoulders&quot;"
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  className="w-full rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  rows={2}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleAiGenerate}
-                    disabled={!aiPrompt.trim() || generatingAi}
-                    className="flex-1"
-                  >
-                    <Sparkles className="size-3.5" />
-                    {generatingAi ? "Generating..." : "Generate Workout"}
-                  </Button>
-                  <Button variant="ghost" onClick={() => setShowAiBuilder(false)}>Cancel</Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
+        <Card className="border-primary/30">
+          <CardContent className="space-y-3 pt-4">
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <Sparkles className="size-3.5 text-primary" /> Describe your workout
+            </div>
+            <textarea
+              placeholder={"e.g. \"Upper body push day, 45 minutes, focus on chest and shoulders\""}
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              className="w-full rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              rows={2}
+            />
             <Button
-              variant="outline"
+              onClick={handleAiGenerate}
+              disabled={!aiPrompt.trim() || generatingAi}
               className="w-full"
-              onClick={() => setShowAiBuilder(true)}
+              size="sm"
             >
-              <Sparkles className="size-3.5" /> Build with AI
+              {generatingAi ? (
+                <><Loader2 className="size-3.5 animate-spin" /> Generating...</>
+              ) : (
+                <><Sparkles className="size-3.5" /> Generate Workout</>
+              )}
             </Button>
-          )}
-        </div>
+          </CardContent>
+        </Card>
       )}
 
-      {showForm && (
+      {/* Manual create — secondary */}
+      {showManualForm && (
         <Card>
           <CardHeader>
-            <CardTitle>New Workout</CardTitle>
+            <CardTitle className="text-sm">New Workout (Manual)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <Input
@@ -154,48 +154,52 @@ export function WorkoutsPage() {
               rows={2}
             />
             <div className="flex gap-2">
-              <Button onClick={handleCreate} className="flex-1">Create</Button>
-              <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button onClick={handleCreate} className="flex-1" size="sm">Create</Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowManualForm(false)}>Cancel</Button>
             </div>
           </CardContent>
         </Card>
       )}
 
       <div className="space-y-3">
-        {workouts.map((w) => (
-          <Link key={w.id} to={`/workouts/${w.id}`} className="block no-underline">
-            <Card size="sm" className="transition-colors hover:border-primary/50">
-              <CardContent className="space-y-2 pt-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-medium text-foreground">{w.name}</h3>
-                    {w.description && (
-                      <p className="text-xs text-muted-foreground">{w.description}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {w.exerciseCount} exercises
-                    </p>
+        {workouts.map((w) => {
+          const lastTrained = getLastTrained(w.id!);
+          return (
+            <Link key={w.id} to={`/library/workout/${w.id}`} className="block no-underline">
+              <Card size="sm" className="transition-colors hover:border-primary/50">
+                <CardContent className="space-y-2 pt-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-medium text-foreground">{w.name}</h3>
+                      {w.description && (
+                        <p className="text-xs text-muted-foreground">{w.description}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {w.exerciseCount} exercises
+                        {lastTrained && <> · last trained {lastTrained}</>}
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="icon-xs"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (confirm("Delete this workout?")) remove(w.id!);
+                      }}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="destructive"
-                    size="icon-xs"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (confirm("Delete this workout?")) remove(w.id!);
-                    }}
-                  >
-                    <Trash2 className="size-3" />
-                  </Button>
-                </div>
-                <MuscleGroupCoverage ratings={w.focusAreas} compact />
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+                  <MuscleGroupCoverage ratings={w.focusAreas} compact />
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
         {workouts.length === 0 && (
           <p className="text-center text-sm text-muted-foreground py-8">
-            No workouts yet. Create one to get started.
+            No workouts yet. Describe what you want above to get started.
           </p>
         )}
       </div>

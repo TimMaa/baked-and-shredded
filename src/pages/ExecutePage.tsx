@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useWorkoutSession } from "@/hooks/useWorkoutSession";
+import { usePreviousPerformance } from "@/hooks/usePreviousPerformance";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,13 +19,15 @@ import * as db from "@/lib/db";
 import * as gemini from "@/lib/gemini";
 import type { Workout, WorkoutExercise, Exercise } from "@/types";
 import { ratedMuscleGroups } from "@/lib/muscleGroups";
-import { Play, Square, Check, AlertTriangle, BarChart3, Shuffle, Sparkles } from "lucide-react";
+import { Play, Square, Check, AlertTriangle, BarChart3, Shuffle, Sparkles, TrendingUp, Lightbulb } from "lucide-react";
 
 interface WorkoutOption extends Workout {
-  exercises: (WorkoutExercise & { exerciseName: string })[];
+  exercises: (WorkoutExercise & { exerciseName: string; exerciseTip: string | null })[];
+  lastTrainedDaysAgo: number | null;
 }
 
 export function ExecutePage() {
+  const [searchParams] = useSearchParams();
   const [workouts, setWorkouts] = useState<WorkoutOption[]>([]);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<number | null>(null);
   const [loadingWorkouts, setLoadingWorkouts] = useState(true);
@@ -44,24 +47,57 @@ export function ExecutePage() {
     startStopwatch, pauseStopwatch, resetStopwatch,
   } = useWorkoutSession();
 
+  const activeExerciseTip = activeSet
+    ? workouts
+        .flatMap((w) => w.exercises)
+        .find((e) => e.id === activeSet.workoutExerciseId)?.exerciseTip ?? null
+    : null;
+
+  const { previous, suggestion } = usePreviousPerformance(
+    activeSet?.workoutExerciseId ?? null,
+    activeSet?.targetReps ?? 0,
+    activeSet?.targetWeight ?? null,
+    activeSet?.targetUnit ?? "kg"
+  );
+
   const loadWorkouts = useCallback(async () => {
     const allWorkouts = await db.getAllWorkouts();
     const allExercises = await db.getAllExercises();
+    const allSessions = await db.getAllSessions();
+    const now = Date.now();
+
     const options: WorkoutOption[] = await Promise.all(
       allWorkouts.map(async (w) => {
         const wes = await db.getWorkoutExercises(w.id!);
+        const lastSession = allSessions
+          .filter((s) => s.workoutId === w.id && s.completedAt)
+          .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())[0];
+        const lastTrainedDaysAgo = lastSession
+          ? Math.round((now - new Date(lastSession.completedAt!).getTime()) / 86400000)
+          : null;
         return {
           ...w,
+          lastTrainedDaysAgo,
           exercises: wes.map((we) => {
             const ex = allExercises.find((e: Exercise) => e.id === we.exerciseId);
-            return { ...we, exerciseName: ex?.name || "Unknown" };
+            return { ...we, exerciseName: ex?.name || "Unknown", exerciseTip: ex?.tip ?? null };
           }),
         };
       })
     );
-    setWorkouts(options.filter((w) => w.exercises.length > 0));
+    const filtered = options.filter((w) => w.exercises.length > 0);
+    setWorkouts(filtered);
+
+    const preselect = searchParams.get("workoutId");
+    if (preselect) {
+      const id = Number(preselect);
+      if (filtered.some((w) => w.id === id)) {
+        setSelectedWorkoutId(id);
+      }
+    }
+
     setLoadingWorkouts(false);
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => { loadWorkouts(); }, [loadWorkouts]);
 
@@ -158,8 +194,8 @@ export function ExecutePage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Execute Workout</h1>
-          <Link to="/history" className="text-sm text-muted-foreground hover:text-foreground">
-            <BarChart3 className="inline size-4 mr-1" />History
+          <Link to="/progress" className="text-sm text-muted-foreground hover:text-foreground">
+            <BarChart3 className="inline size-4 mr-1" />Progress
           </Link>
         </div>
         <Card>
@@ -204,13 +240,16 @@ export function ExecutePage() {
                   <p className="font-medium">{w.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {w.exercises.length} exercises
+                    {w.lastTrainedDaysAgo != null && (
+                      <> · last trained {w.lastTrainedDaysAgo === 0 ? "today" : `${w.lastTrainedDaysAgo}d ago`}</>
+                    )}
                   </p>
                 </div>
               </label>
             ))}
             {workouts.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
-                No workouts with exercises. <Link to="/workouts" className="text-primary">Create one</Link>
+                No workouts with exercises. <Link to="/library" className="text-primary">Create one</Link>
               </p>
             )}
           </CardContent>
@@ -244,8 +283,8 @@ export function ExecutePage() {
             </p>
           )}
         </div>
-        <Button variant="destructive" size="sm" onClick={isComplete ? handleEndSession : () => setShowEndConfirm(true)}>
-          <Square className="size-3" /> End
+        <Button variant="destructive" onClick={isComplete ? handleEndSession : () => setShowEndConfirm(true)}>
+          <Square className="size-4" /> End
         </Button>
       </div>
 
@@ -270,7 +309,12 @@ export function ExecutePage() {
           <CardContent className="space-y-3 pt-4">
             <div className="text-center">
               <p className="text-lg font-bold">{activeSet.exerciseName}</p>
-              <p className="text-sm text-muted-foreground">
+              {activeExerciseTip && (
+                <p className="text-xs text-muted-foreground italic flex items-center justify-center gap-1 mt-0.5">
+                  <Lightbulb className="size-3" /> {activeExerciseTip}
+                </p>
+              )}
+              <p className="text-sm text-muted-foreground mt-1">
                 Set {activeSet.setNumber}
               </p>
             </div>
@@ -285,6 +329,30 @@ export function ExecutePage() {
               )}
             </div>
 
+            {(previous || suggestion) && (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 space-y-1">
+                {previous && (
+                  <p className="text-xs text-muted-foreground">
+                    Last time: {previous.sets.map((s) =>
+                      activeSet.targetUnit === "s"
+                        ? `${s.actualWeight}s`
+                        : `${s.actualReps} reps${s.actualWeight != null ? ` @ ${s.actualWeight}kg` : ""}`
+                    ).join(", ")}
+                  </p>
+                )}
+                {suggestion && (
+                  <p className="text-xs font-medium text-primary flex items-center gap-1">
+                    <TrendingUp className="size-3" />
+                    Try: {activeSet.targetUnit === "s"
+                      ? `${suggestion.suggestedWeight}s`
+                      : `${suggestion.suggestedReps} reps${suggestion.suggestedWeight != null ? ` @ ${suggestion.suggestedWeight}kg` : ""}`
+                    }
+                    <span className="text-muted-foreground font-normal">— {suggestion.reason}</span>
+                  </p>
+                )}
+              </div>
+            )}
+
             {activeSet.targetUnit === "s" && (
               <SessionStopwatch
                 ms={stopwatchMs}
@@ -296,11 +364,11 @@ export function ExecutePage() {
             )}
 
             <div className="flex gap-2">
-              <Button onClick={handleConfirmExpected} className="flex-1">
-                <Check className="size-3.5" /> Confirm
+              <Button onClick={handleConfirmExpected} className="flex-1 h-14 text-lg">
+                <Check className="size-5" /> Confirm
               </Button>
               {activeSet.targetUnit === "s" && stopwatchMs > 0 && (
-                <Button variant="secondary" onClick={handleStopwatchComplete}>
+                <Button variant="secondary" className="h-14 text-lg" onClick={handleStopwatchComplete}>
                   {formatStopwatchTime(stopwatchMs)}
                 </Button>
               )}
@@ -308,10 +376,10 @@ export function ExecutePage() {
 
             <Button
               variant="outline"
-              className="w-full"
+              className="w-full h-12"
               onClick={() => setShowDeviation(!showDeviation)}
             >
-              <AlertTriangle className="size-3.5" /> Record Deviation
+              <AlertTriangle className="size-4" /> Record Deviation
             </Button>
 
             {showDeviation && (
@@ -338,7 +406,7 @@ export function ExecutePage() {
                     onChange={(e) => setDeviationWeight(e.target.value)}
                   />
                 </div>
-                <Button onClick={handleDeviation} className="w-full" size="sm">
+                <Button onClick={handleDeviation} className="w-full" size="default">
                   Save Deviation
                 </Button>
               </div>
@@ -348,21 +416,21 @@ export function ExecutePage() {
             {remainingExercises.length > 1 && (
               <button
                 onClick={() => setShowExercisePicker(!showExercisePicker)}
-                className="flex w-full items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+                className="flex w-full items-center justify-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
               >
-                <Shuffle className="size-3" /> Switch exercise
+                <Shuffle className="size-4" /> Switch exercise
               </button>
             )}
 
             {showExercisePicker && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {remainingExercises
                   .filter((ep) => ep.workoutExerciseId !== activeSet.workoutExerciseId)
                   .map((ep) => (
                     <button
                       key={ep.workoutExerciseId}
                       onClick={() => handleSwitchExercise(ep.workoutExerciseId)}
-                      className="rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent hover:border-primary"
+                      className="rounded-full border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:border-primary"
                     >
                       {ep.exerciseName} ({ep.completedSets}/{ep.totalSets})
                     </button>
@@ -377,12 +445,12 @@ export function ExecutePage() {
       {!activeSet && !isComplete && remainingExercises.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-sm">Choose Next Exercise</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap gap-1.5">
+          <CardContent className="flex flex-wrap gap-2">
             {remainingExercises.map((ep) => (
               <button
                 key={ep.workoutExerciseId}
                 onClick={() => selectNextSet(ep.workoutExerciseId)}
-                className="rounded-full border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent hover:border-primary"
+                className="rounded-full border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:border-primary"
               >
                 {ep.exerciseName} ({ep.completedSets}/{ep.totalSets})
               </button>

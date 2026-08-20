@@ -1,13 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { Dumbbell, ListChecks, Play, BarChart3, Home } from "lucide-react";
+import { CalendarCheck, Play, TrendingUp, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { to: "/", icon: Home, label: "Home" },
-  { to: "/exercises", icon: Dumbbell, label: "Exercises" },
-  { to: "/workouts", icon: ListChecks, label: "Workouts" },
-  { to: "/execute", icon: Play, label: "Execute" },
-  { to: "/history", icon: BarChart3, label: "History" },
+  { to: "/", icon: CalendarCheck, label: "Today" },
+  { to: "/train", icon: Play, label: "Train" },
+  { to: "/progress", icon: TrendingUp, label: "Progress" },
+  { to: "/library", icon: BookOpen, label: "Library" },
 ];
 
 export function BottomNav() {

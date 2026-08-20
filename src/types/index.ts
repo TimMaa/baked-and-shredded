@@ -6,6 +6,7 @@ export interface Exercise {
   description: string | null;
   tip: string | null;
   focusAreas: MuscleRatings;
+  equipment: string[] | null;
   createdAt: string;
 }
 
@@ -35,6 +36,8 @@ export interface Session {
   setsCompleted: number;
   startedAt: string;
   completedAt: string | null;
+  rpe: number | null;
+  notes: string | null;
 }
 
 export interface SessionSet {
@@ -91,4 +94,29 @@ export interface ExerciseDeviationAnalytics {
   deviationRatePct: number;
   avgWeightDelta: number | null;
   avgTimeDeltaSeconds: number | null;
+}
+
+export interface Activity {
+  id?: number;
+  name: string;
+  durationMinutes: number;
+  muscleGroups: MuscleRatings;
+  performedAt: string;
+  notes: string | null;
+}
+
+export interface PersonalRecord {
+  id?: number;
+  exerciseId: number;
+  type: "weight" | "reps" | "time";
+  value: number;
+  sessionId: number;
+  achievedAt: string;
+}
+
+export interface UserPreferences {
+  id: 1;
+  availableEquipment: string;
+  restTimerSeconds: number;
+  weeklyFrequencyGoal: number;
 }

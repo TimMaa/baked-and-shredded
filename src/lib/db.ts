@@ -5,6 +5,9 @@ import type {
   WorkoutExercise,
   Session,
   SessionSet,
+  Activity,
+  PersonalRecord,
+  UserPreferences,
 } from "@/types";
 
 interface BakedDB {
@@ -31,49 +34,83 @@ interface BakedDB {
     value: SessionSet;
     indexes: { bySession: number; byExercise: number };
   };
+  activities: {
+    key: number;
+    value: Activity;
+    indexes: { byPerformedAt: string };
+  };
+  personalRecords: {
+    key: number;
+    value: PersonalRecord;
+    indexes: { byExercise: number };
+  };
+  userPreferences: {
+    key: number;
+    value: UserPreferences;
+  };
 }
 
 const DB_NAME = "baked-and-shredded";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<BakedDB>> | null = null;
 
 export function getDb(): Promise<IDBPDatabase<BakedDB>> {
   if (!dbPromise) {
     dbPromise = openDB<BakedDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        const exercises = db.createObjectStore("exercises", {
-          keyPath: "id",
-          autoIncrement: true,
-        });
-        void exercises;
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const exercises = db.createObjectStore("exercises", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          void exercises;
 
-        const workouts = db.createObjectStore("workouts", {
-          keyPath: "id",
-          autoIncrement: true,
-        });
-        void workouts;
+          const workouts = db.createObjectStore("workouts", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          void workouts;
 
-        const workoutExercises = db.createObjectStore("workoutExercises", {
-          keyPath: "id",
-          autoIncrement: true,
-        });
-        workoutExercises.createIndex("byWorkout", "workoutId");
-        workoutExercises.createIndex("byExercise", "exerciseId");
+          const workoutExercises = db.createObjectStore("workoutExercises", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          workoutExercises.createIndex("byWorkout", "workoutId");
+          workoutExercises.createIndex("byExercise", "exerciseId");
 
-        const sessions = db.createObjectStore("sessions", {
-          keyPath: "id",
-          autoIncrement: true,
-        });
-        sessions.createIndex("byWorkout", "workoutId");
-        sessions.createIndex("byStartedAt", "startedAt");
+          const sessions = db.createObjectStore("sessions", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          sessions.createIndex("byWorkout", "workoutId");
+          sessions.createIndex("byStartedAt", "startedAt");
 
-        const sessionSets = db.createObjectStore("sessionSets", {
-          keyPath: "id",
-          autoIncrement: true,
-        });
-        sessionSets.createIndex("bySession", "sessionId");
-        sessionSets.createIndex("byExercise", "exerciseId");
+          const sessionSets = db.createObjectStore("sessionSets", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          sessionSets.createIndex("bySession", "sessionId");
+          sessionSets.createIndex("byExercise", "exerciseId");
+        }
+
+        if (oldVersion < 2) {
+          const activities = db.createObjectStore("activities", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          activities.createIndex("byPerformedAt", "performedAt");
+
+          const personalRecords = db.createObjectStore("personalRecords", {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          personalRecords.createIndex("byExercise", "exerciseId");
+
+          db.createObjectStore("userPreferences", {
+            keyPath: "id",
+          });
+        }
       },
     });
   }
@@ -284,4 +321,65 @@ export async function getAllSessions(): Promise<Session[]> {
 export async function getAllSessionSets(): Promise<SessionSet[]> {
   const db = await getDb();
   return db.getAll("sessionSets");
+}
+
+// --- Activities ---
+
+export async function createActivity(
+  activity: Omit<Activity, "id">
+): Promise<number> {
+  const db = await getDb();
+  return db.add("activities", activity as Activity) as Promise<number>;
+}
+
+export async function getAllActivities(): Promise<Activity[]> {
+  const db = await getDb();
+  const all = await db.getAll("activities");
+  return all.sort(
+    (a, b) => new Date(b.performedAt).getTime() - new Date(a.performedAt).getTime()
+  );
+}
+
+export async function deleteActivity(id: number): Promise<void> {
+  const db = await getDb();
+  await db.delete("activities", id);
+}
+
+// --- Personal Records ---
+
+export async function addPersonalRecord(
+  record: Omit<PersonalRecord, "id">
+): Promise<number> {
+  const db = await getDb();
+  return db.add("personalRecords", record as PersonalRecord) as Promise<number>;
+}
+
+export async function getPersonalRecords(exerciseId: number): Promise<PersonalRecord[]> {
+  const db = await getDb();
+  return db.getAllFromIndex("personalRecords", "byExercise", exerciseId);
+}
+
+export async function getAllPersonalRecords(): Promise<PersonalRecord[]> {
+  const db = await getDb();
+  return db.getAll("personalRecords");
+}
+
+// --- User Preferences ---
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  id: 1,
+  availableEquipment: "",
+  restTimerSeconds: 90,
+  weeklyFrequencyGoal: 3,
+};
+
+export async function getUserPreferences(): Promise<UserPreferences> {
+  const db = await getDb();
+  const prefs = await db.get("userPreferences", 1);
+  return prefs ?? DEFAULT_PREFERENCES;
+}
+
+export async function saveUserPreferences(prefs: UserPreferences): Promise<void> {
+  const db = await getDb();
+  await db.put("userPreferences", { ...prefs, id: 1 });
 }
