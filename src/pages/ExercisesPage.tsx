@@ -327,19 +327,17 @@ export function ExercisesPage() {
       )}
 
       {/* Actions row */}
-      <div className="flex gap-2">
-        <Card size="sm" className="flex-1">
-          <CardContent className="flex items-center gap-2 pt-3">
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv"
-              onChange={handleCsvImport}
-              className="flex-1 text-sm file:mr-2 file:rounded-md file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-xs file:font-medium file:text-primary"
-            />
-            <Upload className="size-4 text-muted-foreground" />
-          </CardContent>
-        </Card>
+      <div className="flex gap-2 overflow-hidden">
+        <label className="flex-1 min-w-0">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv"
+            onChange={handleCsvImport}
+            className="w-full text-sm file:mr-2 file:rounded-md file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-xs file:font-medium file:text-primary"
+          />
+        </label>
+        <Upload className="size-4 text-muted-foreground shrink-0 self-center" />
       </div>
 
       {gemini.isConfigured() && exercises.length > 0 && (

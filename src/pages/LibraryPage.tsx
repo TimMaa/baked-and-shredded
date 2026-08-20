@@ -9,7 +9,7 @@ export function LibraryPage() {
       <h1 className="text-2xl font-bold">Library</h1>
 
       <Tabs defaultValue="exercises">
-        <TabsList className="w-full">
+        <TabsList className="!w-full grid grid-cols-2">
           <TabsTrigger value="exercises">
             <Dumbbell className="size-3.5" />
             Exercises
@@ -19,10 +19,10 @@ export function LibraryPage() {
             Workouts
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="exercises">
+        <TabsContent value="exercises" className="mt-4">
           <ExercisesPage />
         </TabsContent>
-        <TabsContent value="workouts">
+        <TabsContent value="workouts" className="mt-4">
           <WorkoutsPage />
         </TabsContent>
       </Tabs>
