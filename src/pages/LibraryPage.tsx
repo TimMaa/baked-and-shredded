@@ -9,7 +9,7 @@ export function LibraryPage() {
       <h1 className="text-2xl font-bold">Library</h1>
 
       <Tabs defaultValue="exercises">
-        <TabsList className="!w-full grid grid-cols-2">
+        <TabsList className="w-full! grid grid-cols-2">
           <TabsTrigger value="exercises">
             <Dumbbell className="size-3.5" />
             Exercises

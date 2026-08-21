@@ -15,6 +15,7 @@ export interface Workout {
   name: string;
   description: string | null;
   createdAt: string;
+  archivedAt: string | null;
 }
 
 export interface WorkoutExercise {

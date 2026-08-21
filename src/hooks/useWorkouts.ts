@@ -15,10 +15,11 @@ export function useWorkouts() {
   const refresh = useCallback(async () => {
     setLoading(true);
     const allWorkouts = await db.getAllWorkouts();
+    const activeWorkouts = allWorkouts.filter((w) => !w.archivedAt);
     const allExercises = await db.getAllExercises();
 
     const enriched: EnrichedWorkout[] = await Promise.all(
-      allWorkouts.map(async (w) => {
+      activeWorkouts.map(async (w) => {
         const wExercises = await db.getWorkoutExercises(w.id!);
         const focusAreas = aggregateMuscleRatings(wExercises, allExercises);
         return { ...w, exerciseCount: wExercises.length, focusAreas };
@@ -34,7 +35,7 @@ export function useWorkouts() {
   }, [refresh]);
 
   const create = useCallback(
-    async (workout: Omit<Workout, "id" | "createdAt">) => {
+    async (workout: Omit<Workout, "id" | "createdAt" | "archivedAt">) => {
       await db.createWorkout(workout);
       await refresh();
     },

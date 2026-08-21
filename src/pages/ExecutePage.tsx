@@ -85,7 +85,7 @@ export function ExecutePage() {
         };
       })
     );
-    const filtered = options.filter((w) => w.exercises.length > 0);
+    const filtered = options.filter((w) => w.exercises.length > 0 && !w.archivedAt);
     setWorkouts(filtered);
 
     const preselect = searchParams.get("workoutId");
@@ -283,8 +283,8 @@ export function ExecutePage() {
             </p>
           )}
         </div>
-        <Button variant="destructive" onClick={isComplete ? handleEndSession : () => setShowEndConfirm(true)}>
-          <Square className="size-4" /> End
+        <Button variant="destructive" className="h-12 px-5 text-base" onClick={isComplete ? handleEndSession : () => setShowEndConfirm(true)}>
+          <Square className="size-5" /> End
         </Button>
       </div>
 
@@ -364,11 +364,11 @@ export function ExecutePage() {
             )}
 
             <div className="flex gap-2">
-              <Button onClick={handleConfirmExpected} className="flex-1 h-14 text-lg">
-                <Check className="size-5" /> Confirm
+              <Button onClick={handleConfirmExpected} className="flex-1 h-16 text-xl">
+                <Check className="size-6" /> Confirm
               </Button>
               {activeSet.targetUnit === "s" && stopwatchMs > 0 && (
-                <Button variant="secondary" className="h-14 text-lg" onClick={handleStopwatchComplete}>
+                <Button variant="secondary" className="h-16 text-xl" onClick={handleStopwatchComplete}>
                   {formatStopwatchTime(stopwatchMs)}
                 </Button>
               )}
@@ -376,10 +376,10 @@ export function ExecutePage() {
 
             <Button
               variant="outline"
-              className="w-full h-12"
+              className="w-full h-14 text-lg"
               onClick={() => setShowDeviation(!showDeviation)}
             >
-              <AlertTriangle className="size-4" /> Record Deviation
+              <AlertTriangle className="size-5" /> Record Deviation
             </Button>
 
             {showDeviation && (
@@ -406,7 +406,7 @@ export function ExecutePage() {
                     onChange={(e) => setDeviationWeight(e.target.value)}
                   />
                 </div>
-                <Button onClick={handleDeviation} className="w-full" size="default">
+                <Button onClick={handleDeviation} className="w-full h-14 text-lg">
                   Save Deviation
                 </Button>
               </div>

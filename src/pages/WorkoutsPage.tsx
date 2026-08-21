@@ -185,7 +185,11 @@ export function WorkoutsPage() {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        if (confirm("Delete this workout?")) remove(w.id!);
+                        const hasSessions = sessions.some((s) => s.workoutId === w.id);
+                        const msg = hasSessions
+                          ? "Archive this workout? It will be hidden but your training history is preserved."
+                          : "Delete this workout?";
+                        if (confirm(msg)) remove(w.id!);
                       }}
                     >
                       <Trash2 className="size-3" />

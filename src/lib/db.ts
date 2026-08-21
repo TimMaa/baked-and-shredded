@@ -153,12 +153,13 @@ export async function deleteExercise(id: number): Promise<void> {
 // --- Workouts ---
 
 export async function createWorkout(
-  workout: Omit<Workout, "id" | "createdAt">
+  workout: Omit<Workout, "id" | "createdAt" | "archivedAt">
 ): Promise<number> {
   const db = await getDb();
   return db.add("workouts", {
     ...workout,
     createdAt: new Date().toISOString(),
+    archivedAt: null,
   } as Workout) as Promise<number>;
 }
 
@@ -182,19 +183,20 @@ export async function updateWorkout(workout: Workout): Promise<void> {
 
 export async function deleteWorkout(id: number): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction(["workouts", "workoutExercises", "sessions", "sessionSets"], "readwrite");
-  await tx.objectStore("workouts").delete(id);
+  const sessions = await db.getAllFromIndex("sessions", "byWorkout", id);
+  if (sessions.length > 0) {
+    const workout = await db.get("workouts", id);
+    if (workout) {
+      workout.archivedAt = new Date().toISOString();
+      await db.put("workouts", workout);
+    }
+  } else {
+    await db.delete("workouts", id);
+  }
+  const tx = db.transaction("workoutExercises", "readwrite");
   const weIdx = tx.objectStore("workoutExercises").index("byWorkout");
   for (const we of await weIdx.getAll(id)) {
     await tx.objectStore("workoutExercises").delete(we.id!);
-  }
-  const sessIdx = tx.objectStore("sessions").index("byWorkout");
-  for (const sess of await sessIdx.getAll(id)) {
-    const setsIdx = tx.objectStore("sessionSets").index("bySession");
-    for (const set of await setsIdx.getAll(sess.id!)) {
-      await tx.objectStore("sessionSets").delete(set.id!);
-    }
-    await tx.objectStore("sessions").delete(sess.id!);
   }
   await tx.done;
 }

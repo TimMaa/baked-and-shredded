@@ -21,20 +21,20 @@ export function SessionStopwatch({ ms, running, onStart, onPause, onReset }: Ses
         {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}.
         {String(centiseconds).padStart(2, "0")}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {running ? (
-          <Button variant="outline" size="sm" onClick={onPause}>
-            <Pause className="size-3.5" />
+          <Button variant="outline" className="h-14 min-w-28 text-lg" onClick={onPause}>
+            <Pause className="size-5" />
             Pause
           </Button>
         ) : (
-          <Button variant="default" size="sm" onClick={onStart}>
-            <Play className="size-3.5" />
+          <Button variant="default" className="h-14 min-w-28 text-lg" onClick={onStart}>
+            <Play className="size-5" />
             Start
           </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={onReset}>
-          <RotateCcw className="size-3.5" />
+        <Button variant="ghost" className="h-14 text-lg" onClick={onReset}>
+          <RotateCcw className="size-5" />
           Reset
         </Button>
       </div>
