@@ -115,6 +115,16 @@ export function useWorkoutDetail(id: number | undefined) {
     [exercises, refresh]
   );
 
+  const replaceExercise = useCallback(
+    async (weId: number, newExerciseId: number) => {
+      const existing = exercises.find((e) => e.id === weId);
+      if (!existing) return;
+      await db.updateWorkoutExercise({ ...existing, exerciseId: newExerciseId });
+      await refresh();
+    },
+    [exercises, refresh]
+  );
+
   const reorder = useCallback(
     async (orderedIds: number[]) => {
       if (!id) return;
@@ -134,6 +144,7 @@ export function useWorkoutDetail(id: number | undefined) {
     updateWorkout,
     addExercise,
     removeExercise,
+    replaceExercise,
     updateExerciseParams,
     reorder,
   };

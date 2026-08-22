@@ -367,16 +367,17 @@ export function ExercisesPage() {
                     <p className="text-xs italic text-muted-foreground">Tip: {ex.tip}</p>
                   )}
                 </div>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon-xs" onClick={() => startEdit(ex)}>
-                    <Pencil className="size-3" />
+                <div className="flex gap-3">
+                  <Button variant="ghost" size="icon" className="min-w-11 min-h-11" onClick={() => startEdit(ex)}>
+                    <Pencil className="size-4" />
                   </Button>
                   <Button
                     variant="destructive"
-                    size="icon-xs"
+                    size="icon"
+                    className="min-w-11 min-h-11"
                     onClick={() => { if (confirm("Delete this exercise?")) remove(ex.id!); }}
                   >
-                    <Trash2 className="size-3" />
+                    <Trash2 className="size-4" />
                   </Button>
                 </div>
               </div>

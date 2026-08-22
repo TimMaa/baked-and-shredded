@@ -7,14 +7,14 @@ import { Input } from "@/components/ui/input";
 import { MuscleGroupCoverage } from "@/components/workouts/MuscleGroupCoverage";
 import { ExerciseSelector } from "@/components/workouts/ExerciseSelector";
 import type { Exercise } from "@/types";
-import { ArrowLeft, Plus, Trash2, GripVertical, ChevronUp, ChevronDown, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, GripVertical, ChevronUp, ChevronDown, Pencil, Check, X, ArrowLeftRight } from "lucide-react";
 
 export function WorkoutDetailPage() {
   const { id } = useParams();
   const workoutId = id ? Number(id) : undefined;
   const {
     workout, exercises, allExercises, focusAreas, loading,
-    updateWorkout, addExercise, removeExercise, updateExerciseParams, reorder,
+    updateWorkout, addExercise, removeExercise, replaceExercise, updateExerciseParams, reorder,
   } = useWorkoutDetail(workoutId);
 
   const [editing, setEditing] = useState(false);
@@ -32,6 +32,7 @@ export function WorkoutDetailPage() {
   const [editReps, setEditReps] = useState("");
   const [editWeight, setEditWeight] = useState("");
   const [editUnit, setEditUnit] = useState<"kg" | "s">("kg");
+  const [replacingExId, setReplacingExId] = useState<number | null>(null);
 
   if (loading || !workout) {
     return <div className="text-center text-muted-foreground">Loading...</div>;
@@ -108,6 +109,11 @@ export function WorkoutDetailPage() {
       editUnit
     );
     setEditingExId(null);
+  };
+
+  const handleReplace = async (weId: number, newExercise: Exercise) => {
+    await replaceExercise(weId, newExercise.id!);
+    setReplacingExId(null);
   };
 
   return (
@@ -245,8 +251,11 @@ export function WorkoutDetailPage() {
                 )}
               </div>
               <div className="flex items-center gap-0.5">
-                {editingExId !== we.id && (
+                {editingExId !== we.id && replacingExId !== we.id && (
                   <>
+                    <Button variant="ghost" size="icon-xs" onClick={() => setReplacingExId(we.id!)}>
+                      <ArrowLeftRight className="size-3" />
+                    </Button>
                     <Button variant="ghost" size="icon-xs" onClick={() => startEditExercise(we)}>
                       <Pencil className="size-3" />
                     </Button>
@@ -267,6 +276,20 @@ export function WorkoutDetailPage() {
                 )}
               </div>
             </div>
+
+            {replacingExId === we.id && (
+              <div className="mt-2 ml-11 space-y-2">
+                <p className="text-xs text-muted-foreground">Replace with:</p>
+                <ExerciseSelector
+                  exercises={allExercises}
+                  excludeIds={exercises.map((e) => e.exerciseId)}
+                  onSelect={(ex) => handleReplace(we.id!, ex)}
+                />
+                <Button size="sm" variant="ghost" onClick={() => setReplacingExId(null)}>
+                  Cancel
+                </Button>
+              </div>
+            )}
 
             {editingExId === we.id && (
               <div className="mt-2 ml-11 space-y-2">
@@ -310,7 +333,7 @@ export function WorkoutDetailPage() {
               </div>
             )}
 
-            {editingExId !== we.id && (
+            {editingExId !== we.id && replacingExId !== we.id && (
               <div className="mt-2 ml-11">
                 <MuscleGroupCoverage ratings={we.focusAreas} compact />
               </div>

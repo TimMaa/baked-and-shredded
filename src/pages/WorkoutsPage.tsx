@@ -38,28 +38,66 @@ export function WorkoutsPage() {
     setGeneratingAi(true);
     try {
       const allExercises = await db.getAllExercises();
-      if (allExercises.length === 0) {
-        setGeneratingAi(false);
-        return;
-      }
       const availableExercises = allExercises.map((e) => ({
         id: e.id!,
         name: e.name,
         muscleGroups: ratedMuscleGroups(e.focusAreas),
       }));
 
+      const prefs = await db.getUserPreferences();
+
       const result = await gemini.generateWorkout({
         prompt: aiPrompt.trim(),
         availableExercises,
+        availableEquipment: prefs.availableEquipment || undefined,
       });
+
+      const resolvedExercises: { exerciseId: number; sets: number; targetReps: number; targetWeight: number | null; targetUnit: "kg" | "s" }[] = [];
+
+      for (const ex of result.exercises) {
+        if (ex.existingId) {
+          resolvedExercises.push({
+            exerciseId: ex.existingId,
+            sets: ex.sets,
+            targetReps: ex.targetReps,
+            targetWeight: ex.targetWeight,
+            targetUnit: ex.targetUnit,
+          });
+        } else if (ex.newExercise) {
+          try {
+            const newId = await db.createExercise({
+              name: ex.newExercise.name,
+              description: ex.newExercise.description || null,
+              tip: ex.newExercise.tip || null,
+              focusAreas: ex.newExercise.focusAreas,
+              equipment: ex.newExercise.equipment,
+            });
+            resolvedExercises.push({
+              exerciseId: newId,
+              sets: ex.sets,
+              targetReps: ex.targetReps,
+              targetWeight: ex.targetWeight,
+              targetUnit: ex.targetUnit,
+            });
+          } catch {
+            // skip exercises that fail to create
+          }
+        }
+      }
+
+      if (resolvedExercises.length === 0) {
+        alert("Workout generation failed — no exercises could be resolved. Try again.");
+        setGeneratingAi(false);
+        return;
+      }
 
       const workoutId = await db.createWorkout({
         name: result.name,
         description: result.description || null,
       });
 
-      for (let i = 0; i < result.exercises.length; i++) {
-        const ex = result.exercises[i];
+      for (let i = 0; i < resolvedExercises.length; i++) {
+        const ex = resolvedExercises[i];
         await db.addWorkoutExercise({
           workoutId,
           exerciseId: ex.exerciseId,
@@ -75,7 +113,7 @@ export function WorkoutsPage() {
       await refresh();
       navigate(`/library/workout/${workoutId}`);
     } catch {
-      // silently fail
+      alert("Workout generation failed. Please try again.");
     }
     setGeneratingAi(false);
   };

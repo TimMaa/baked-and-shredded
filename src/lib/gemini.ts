@@ -178,25 +178,46 @@ Return ONLY a JSON object (no markdown, no code fences):
 
 // --- Feature 3: Natural Language Workout Builder ---
 
+export interface GeneratedWorkoutExercise {
+  existingId?: number;
+  newExercise?: {
+    name: string;
+    description: string;
+    tip: string;
+    focusAreas: MuscleRatings;
+    equipment: string[] | null;
+  };
+  sets: number;
+  targetReps: number;
+  targetWeight: number | null;
+  targetUnit: "kg" | "s";
+}
+
 export interface GeneratedWorkout {
   name: string;
   description: string;
-  exercises: {
-    exerciseId: number;
-    sets: number;
-    targetReps: number;
-    targetWeight: number | null;
-    targetUnit: "kg" | "s";
-  }[];
+  exercises: GeneratedWorkoutExercise[];
 }
 
 interface BuilderInput {
   prompt: string;
   availableExercises: { id: number; name: string; muscleGroups: string[] }[];
+  availableEquipment?: string;
 }
 
 export async function generateWorkout(input: BuilderInput): Promise<GeneratedWorkout> {
   const client = getClient();
+  const muscleList = ALL_MUSCLE_GROUPS.join(", ");
+
+  const librarySection = input.availableExercises.length > 0
+    ? `Existing exercise library (prefer these where they fit, reference by existingId):
+${input.availableExercises.map((e) => `- ID ${e.id}: "${e.name}" (${e.muscleGroups.join(", ")})`).join("\n")}`
+    : "The user has no exercises yet — create all exercises fresh using newExercise.";
+
+  const equipmentSection = input.availableEquipment
+    ? `\nThe user has this equipment available: "${input.availableEquipment}"
+ONLY suggest exercises that can be performed with this equipment or bodyweight. Do not suggest exercises requiring equipment the user doesn't have.`
+    : "";
 
   const interaction = await client.interactions.create({
     model: "gemini-3.1-flash-lite",
@@ -204,21 +225,26 @@ export async function generateWorkout(input: BuilderInput): Promise<GeneratedWor
       {
         type: "text",
         text: `You are a strength and conditioning coach. Create a workout based on this request: "${input.prompt}"
+${equipmentSection}
 
-You MUST only use exercises from this library (use the exact IDs):
-${input.availableExercises.map((e) => `- ID ${e.id}: "${e.name}" (${e.muscleGroups.join(", ")})`).join("\n")}
+${librarySection}
 
 Return ONLY a JSON object (no markdown, no code fences):
 {
   "name": "Short workout name",
   "description": "One sentence describing the workout focus",
   "exercises": [
-    { "exerciseId": <id>, "sets": 3, "targetReps": 10, "targetWeight": null, "targetUnit": "kg" }
+    { "existingId": 42, "sets": 3, "targetReps": 10, "targetWeight": null, "targetUnit": "kg" },
+    { "newExercise": { "name": "Exercise Name", "description": "One sentence what it works", "tip": "One form cue", "focusAreas": { "Chest": 0, "Back": 0, ... }, "equipment": ["dumbbell"] }, "sets": 3, "targetReps": 10, "targetWeight": null, "targetUnit": "kg" }
   ]
 }
 
 Rules:
 - Pick 4-8 exercises that match the request
+- Use "existingId" when a suitable exercise is already in the library
+- Use "newExercise" to introduce exercises not in the library that fit the workout
+- For newExercise.focusAreas: include ALL these muscle groups rated 0-5: ${muscleList}
+- For newExercise.equipment: list required equipment as short strings (e.g. ["dumbbell", "bench"]), or null for bodyweight-only
 - Use targetUnit "s" for timed exercises (planks, holds), "kg" for everything else
 - For timed exercises: targetReps should be 1, targetWeight is the time in seconds
 - Set targetWeight to null if unknown (user can adjust later)
@@ -232,20 +258,41 @@ Rules:
   const parsed = JSON.parse(jsonStr);
 
   const validIds = new Set(input.availableExercises.map((e) => e.id));
-  const exercises = (parsed.exercises || []).filter(
-    (e: any) => validIds.has(e.exerciseId)
-  );
 
   return {
     name: parsed.name || "AI Workout",
     description: parsed.description || "",
-    exercises: exercises.map((e: any) => ({
-      exerciseId: e.exerciseId,
-      sets: Number(e.sets) || 3,
-      targetReps: Number(e.targetReps) || 10,
-      targetWeight: e.targetWeight != null ? Number(e.targetWeight) : null,
-      targetUnit: e.targetUnit === "s" ? "s" : "kg",
-    })),
+    exercises: (parsed.exercises || []).map((e: any) => {
+      const base = {
+        sets: Number(e.sets) || 3,
+        targetReps: Number(e.targetReps) || 10,
+        targetWeight: e.targetWeight != null ? Number(e.targetWeight) : null,
+        targetUnit: (e.targetUnit === "s" ? "s" : "kg") as "kg" | "s",
+      };
+
+      if (e.existingId && validIds.has(e.existingId)) {
+        return { ...base, existingId: e.existingId };
+      }
+
+      if (e.newExercise && e.newExercise.name) {
+        const fa: MuscleRatings = {};
+        for (const g of ALL_MUSCLE_GROUPS) {
+          fa[g] = Math.min(5, Math.max(0, Number(e.newExercise.focusAreas?.[g]) || 0));
+        }
+        return {
+          ...base,
+          newExercise: {
+            name: String(e.newExercise.name),
+            description: String(e.newExercise.description || ""),
+            tip: String(e.newExercise.tip || ""),
+            focusAreas: fa,
+            equipment: Array.isArray(e.newExercise.equipment) ? e.newExercise.equipment : null,
+          },
+        };
+      }
+
+      return null;
+    }).filter(Boolean) as GeneratedWorkoutExercise[],
   };
 }
 
