@@ -250,18 +250,28 @@ export async function reorderWorkoutExercises(
 
 // --- Sessions ---
 
+export type CreateSessionResult =
+  | { status: "created"; sessionId: number }
+  | { status: "conflict"; session: Session };
+
 export async function createSession(
   workoutId: number,
   totalSetsPlanned: number
-): Promise<number> {
+): Promise<CreateSessionResult> {
+  const activeSession = await getActiveSession();
+  if (activeSession) {
+    return { status: "conflict", session: activeSession };
+  }
+
   const db = await getDb();
-  return db.add("sessions", {
+  const sessionId = (await db.add("sessions", {
     workoutId,
     totalSetsPlanned,
     setsCompleted: 0,
     startedAt: new Date().toISOString(),
     completedAt: null,
-  } as Session) as Promise<number>;
+  } as Session)) as number;
+  return { status: "created", sessionId };
 }
 
 export async function completeSession(
