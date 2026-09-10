@@ -22,7 +22,7 @@ import { ratedMuscleGroups } from "@/lib/muscleGroups";
 import { Play, Square, Check, AlertTriangle, BarChart3, Shuffle, Sparkles, TrendingUp, Lightbulb } from "lucide-react";
 
 interface WorkoutOption extends Workout {
-  exercises: (WorkoutExercise & { exerciseName: string; exerciseTip: string | null })[];
+  exercises: (WorkoutExercise & { exerciseName: string; exerciseTip: string | null; unilateral: boolean })[];
   lastTrainedDaysAgo: number | null;
 }
 
@@ -80,7 +80,12 @@ export function ExecutePage() {
           lastTrainedDaysAgo,
           exercises: wes.map((we) => {
             const ex = allExercises.find((e: Exercise) => e.id === we.exerciseId);
-            return { ...we, exerciseName: ex?.name || "Unknown", exerciseTip: ex?.tip ?? null };
+            return {
+              ...we,
+              exerciseName: ex?.name || "Unknown",
+              exerciseTip: ex?.tip ?? null,
+              unilateral: ex?.unilateral ?? false,
+            };
           }),
         };
       })
@@ -317,15 +322,22 @@ export function ExecutePage() {
               <p className="text-sm text-muted-foreground mt-1">
                 Set {activeSet.setNumber}
               </p>
+              {activeSet.unilateral && (
+                <p className="text-xs text-muted-foreground">Each side counts as this set</p>
+              )}
             </div>
             <div className="flex justify-center gap-3">
               <Badge variant="secondary">
                 {activeSet.targetUnit === "s"
-                  ? `${activeSet.targetWeight}s`
+                  ? `${activeSet.targetWeight ?? 0}s`
                   : `${activeSet.targetReps} reps`}
               </Badge>
-              {activeSet.targetUnit === "kg" && activeSet.targetWeight && (
-                <Badge variant="secondary">{activeSet.targetWeight} kg</Badge>
+              {activeSet.targetUnit === "kg" && (
+                activeSet.targetWeight != null ? (
+                  <Badge variant="secondary">{activeSet.targetWeight} kg</Badge>
+                ) : (
+                  <Badge variant="outline">No target weight</Badge>
+                )
               )}
             </div>
 
@@ -401,7 +413,7 @@ export function ExecutePage() {
                   </label>
                   <Input
                     type="number"
-                    placeholder={String(activeSet.targetWeight || "")}
+                    placeholder={activeSet.targetWeight != null ? String(activeSet.targetWeight) : ""}
                     value={deviationWeight}
                     onChange={(e) => setDeviationWeight(e.target.value)}
                   />

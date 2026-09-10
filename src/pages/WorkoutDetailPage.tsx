@@ -181,6 +181,11 @@ export function WorkoutDetailPage() {
                 <p className="text-sm font-medium">
                   Selected: {selectedExercise.name}
                 </p>
+                {selectedExercise.unilateral && (
+                  <p className="text-xs text-muted-foreground">
+                    Unilateral — a set is one rep on each side.
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-xs text-muted-foreground">Sets</label>
@@ -245,8 +250,11 @@ export function WorkoutDetailPage() {
                   <p className="text-xs text-muted-foreground">
                     {we.sets} sets &times;{" "}
                     {we.targetUnit === "s"
-                      ? `${we.targetWeight || 0}s`
-                      : `${we.targetReps} reps${we.targetWeight ? ` @ ${we.targetWeight}kg` : ""}`}
+                      ? `${we.targetWeight ?? 0}s`
+                      : `${we.targetReps} reps${
+                          we.targetWeight == null ? " · no target weight" : ` @ ${we.targetWeight}kg`
+                        }`}
+                    {we.unilateral && " · each side"}
                   </p>
                 )}
               </div>

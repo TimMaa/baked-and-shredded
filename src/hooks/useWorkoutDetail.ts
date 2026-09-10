@@ -6,6 +6,7 @@ import { createDefaultMuscleRatings } from "@/lib/muscleGroups";
 export interface WorkoutExerciseEnriched extends WorkoutExercise {
   exerciseName: string;
   focusAreas: MuscleRatings;
+  unilateral: boolean;
 }
 
 export function useWorkoutDetail(id: number | undefined) {
@@ -34,6 +35,7 @@ export function useWorkoutDetail(id: number | undefined) {
         ...we,
         exerciseName: ex?.name || "Unknown",
         focusAreas: ex?.focusAreas || createDefaultMuscleRatings(),
+        unilateral: ex?.unilateral ?? false,
       };
     });
     setExercises(enriched);

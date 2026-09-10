@@ -37,11 +37,37 @@ export function WorkoutsPage() {
     if (!aiPrompt.trim()) return;
     setGeneratingAi(true);
     try {
-      const allExercises = await db.getAllExercises();
+      const [allExercises, allSessionSets, allPersonalRecords] = await Promise.all([
+        db.getAllExercises(),
+        db.getAllSessionSets(),
+        db.getAllPersonalRecords(),
+      ]);
+
+      const bestWeightByExercise = new Map<number, number>();
+      for (const pr of allPersonalRecords) {
+        if (pr.type !== "weight") continue;
+        const current = bestWeightByExercise.get(pr.exerciseId);
+        if (current === undefined || pr.value > current) {
+          bestWeightByExercise.set(pr.exerciseId, pr.value);
+        }
+      }
+
+      const recentWeightByExercise = new Map<number, { value: number; at: number }>();
+      for (const set of allSessionSets) {
+        if (set.targetUnit !== "kg" || set.actualWeight == null) continue;
+        const at = new Date(set.completedAt).getTime();
+        const current = recentWeightByExercise.get(set.exerciseId);
+        if (!current || at > current.at) {
+          recentWeightByExercise.set(set.exerciseId, { value: set.actualWeight, at });
+        }
+      }
+
       const availableExercises = allExercises.map((e) => ({
         id: e.id!,
         name: e.name,
         muscleGroups: ratedMuscleGroups(e.focusAreas),
+        recentWeightKg: recentWeightByExercise.get(e.id!)?.value ?? null,
+        bestWeightKg: bestWeightByExercise.get(e.id!) ?? null,
       }));
 
       const prefs = await db.getUserPreferences();
@@ -71,6 +97,7 @@ export function WorkoutsPage() {
               tip: ex.newExercise.tip || null,
               focusAreas: ex.newExercise.focusAreas,
               equipment: ex.newExercise.equipment,
+              unilateral: ex.newExercise.unilateral,
             });
             resolvedExercises.push({
               exerciseId: newId,

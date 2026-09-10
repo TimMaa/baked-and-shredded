@@ -3,6 +3,7 @@ import { useExercises } from "@/hooks/useExercises";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { MuscleGroupSelector } from "@/components/workouts/MuscleGroupSelector";
 import { MuscleGroupCoverage } from "@/components/workouts/MuscleGroupCoverage";
 import { createDefaultMuscleRatings } from "@/lib/muscleGroups";
@@ -17,6 +18,7 @@ export function ExercisesPage() {
   const [description, setDescription] = useState("");
   const [tip, setTip] = useState("");
   const [muscleRatings, setMuscleRatings] = useState<MuscleRatings>(createDefaultMuscleRatings());
+  const [unilateral, setUnilateral] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [reanalyzing, setReanalyzing] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState("");
@@ -33,6 +35,7 @@ export function ExercisesPage() {
     let desc: string | null = null;
     let exTip: string | null = null;
     let focusAreas = createDefaultMuscleRatings();
+    let isUnilateral = false;
 
     if (gemini.isConfigured()) {
       try {
@@ -40,6 +43,7 @@ export function ExercisesPage() {
         desc = result.description;
         exTip = result.tip;
         focusAreas = result.focusAreas;
+        isUnilateral = result.unilateral;
       } catch {
         // proceed without AI
       }
@@ -51,6 +55,7 @@ export function ExercisesPage() {
       tip: exTip,
       focusAreas,
       equipment: null,
+      unilateral: isUnilateral,
     });
 
     setName("");
@@ -80,6 +85,7 @@ export function ExercisesPage() {
               tip: analyzed.tip || null,
               focusAreas: analyzed.focusAreas,
               equipment: null,
+              unilateral: analyzed.unilateral,
             });
           }
           continue;
@@ -110,6 +116,7 @@ export function ExercisesPage() {
     setDescription("");
     setTip("");
     setMuscleRatings(createDefaultMuscleRatings());
+    setUnilateral(false);
     setEditingId(null);
     setShowAdvanced(false);
   };
@@ -124,6 +131,7 @@ export function ExercisesPage() {
         description: description.trim() || null,
         tip: tip.trim() || null,
         focusAreas: muscleRatings,
+        unilateral,
       });
     }
     resetForm();
@@ -135,6 +143,7 @@ export function ExercisesPage() {
     setDescription(ex.description || "");
     setTip(ex.tip || "");
     setMuscleRatings(ex.focusAreas);
+    setUnilateral(ex.unilateral ?? false);
     setShowAdvanced(true);
   };
 
@@ -146,6 +155,7 @@ export function ExercisesPage() {
       setDescription(result.description);
       setTip(result.tip);
       setMuscleRatings(result.focusAreas);
+      setUnilateral(result.unilateral);
     } catch {
       // silently fail
     }
@@ -194,6 +204,7 @@ export function ExercisesPage() {
               description: analyzed.description || match.description,
               tip: analyzed.tip || match.tip,
               focusAreas: analyzed.focusAreas,
+              unilateral: analyzed.unilateral,
             });
           }
         }
@@ -318,6 +329,14 @@ export function ExercisesPage() {
               Muscle Groups
             </button>
             {showAdvanced && <MuscleGroupSelector value={muscleRatings} onChange={setMuscleRatings} />}
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={unilateral}
+                onChange={(e) => setUnilateral(e.target.checked)}
+              />
+              Unilateral — a set is one rep on each side
+            </label>
             <div className="flex gap-2">
               <Button onClick={handleEditSubmit} className="flex-1">Update</Button>
               <Button variant="ghost" onClick={resetForm}>Cancel</Button>
@@ -359,7 +378,12 @@ export function ExercisesPage() {
             <CardContent className="space-y-2 pt-3">
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="font-medium">{ex.name}</h3>
+                  <h3 className="font-medium flex items-center gap-1.5">
+                    {ex.name}
+                    {ex.unilateral && (
+                      <Badge variant="outline" className="text-[10px] font-normal">Each side</Badge>
+                    )}
+                  </h3>
                   {ex.description && (
                     <p className="text-xs text-muted-foreground">{ex.description}</p>
                   )}

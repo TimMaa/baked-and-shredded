@@ -11,6 +11,7 @@ interface ExerciseProgress {
   targetReps: number;
   targetWeight: number | null;
   targetUnit: "kg" | "s";
+  unilateral: boolean;
 }
 
 interface ActiveSet {
@@ -21,6 +22,7 @@ interface ActiveSet {
   targetReps: number;
   targetWeight: number | null;
   targetUnit: "kg" | "s";
+  unilateral: boolean;
 }
 
 function computeNextSet(
@@ -41,6 +43,7 @@ function computeNextSet(
       targetReps: current.targetReps,
       targetWeight: current.targetWeight,
       targetUnit: current.targetUnit,
+      unilateral: current.unilateral,
     };
   }
 
@@ -56,6 +59,7 @@ function computeNextSet(
     targetReps: next.targetReps,
     targetWeight: next.targetWeight,
     targetUnit: next.targetUnit,
+    unilateral: next.unilateral,
   };
 }
 
@@ -73,7 +77,9 @@ async function hydrateSession(session: Session): Promise<HydratedSession> {
   const allExercises = await db.getAllExercises();
   const sets = await db.getSessionSets(session.id!);
 
-  const exerciseMap = new Map(allExercises.map((e) => [e.id!, e.name]));
+  const exerciseMap = new Map(
+    allExercises.map((e) => [e.id!, { name: e.name, unilateral: e.unilateral ?? false }])
+  );
 
   const progress: ExerciseProgress[] = wes.map((we) => {
     const completedCount = sets.filter(
@@ -82,12 +88,13 @@ async function hydrateSession(session: Session): Promise<HydratedSession> {
     return {
       exerciseId: we.exerciseId,
       workoutExerciseId: we.id!,
-      exerciseName: exerciseMap.get(we.exerciseId) || "Unknown",
+      exerciseName: exerciseMap.get(we.exerciseId)?.name || "Unknown",
       totalSets: we.sets,
       completedSets: completedCount,
       targetReps: we.targetReps,
       targetWeight: we.targetWeight,
       targetUnit: we.targetUnit,
+      unilateral: exerciseMap.get(we.exerciseId)?.unilateral ?? false,
     };
   });
 
@@ -95,7 +102,7 @@ async function hydrateSession(session: Session): Promise<HydratedSession> {
     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
     .map((s) => ({
       ...s,
-      exerciseName: exerciseMap.get(s.exerciseId) || "Unknown",
+      exerciseName: exerciseMap.get(s.exerciseId)?.name || "Unknown",
     }));
 
   const lastSet = enrichedSets[0];
@@ -178,7 +185,7 @@ export function useWorkoutSession() {
   const startSession = useCallback(
     async (
       workoutId: number,
-      workoutExercises: (WorkoutExercise & { exerciseName: string })[]
+      workoutExercises: (WorkoutExercise & { exerciseName: string; unilateral: boolean })[]
     ) => {
       const total = workoutExercises.reduce((sum, we) => sum + we.sets, 0);
       const result = await db.createSession(workoutId, total);
@@ -210,6 +217,7 @@ export function useWorkoutSession() {
         targetReps: we.targetReps,
         targetWeight: we.targetWeight,
         targetUnit: we.targetUnit,
+        unilateral: we.unilateral,
       }));
       setExerciseProgress(progress);
 
@@ -318,6 +326,7 @@ export function useWorkoutSession() {
         targetReps: ep.targetReps,
         targetWeight: ep.targetWeight,
         targetUnit: ep.targetUnit,
+        unilateral: ep.unilateral,
       });
     },
     [exerciseProgress]

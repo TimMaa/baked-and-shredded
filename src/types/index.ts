@@ -7,6 +7,8 @@ export interface Exercise {
   tip: string | null;
   focusAreas: MuscleRatings;
   equipment: string[] | null;
+  /** True if each side is worked separately (e.g. single-arm row, dead bug) — a Set means one rep per side. */
+  unilateral?: boolean;
   createdAt: string;
 }
 
