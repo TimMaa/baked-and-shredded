@@ -9,10 +9,12 @@ export interface MuscleRecovery {
   status: "fresh" | "recovering" | "fatigued";
 }
 
-function getStatus(hours: number | null): "fresh" | "recovering" | "fatigued" {
+function getStatus(hours: number | null, intensity: number): "fresh" | "recovering" | "fatigued" {
   if (hours === null) return "fresh";
-  if (hours >= 72) return "fresh";
-  if (hours >= 24) return "recovering";
+  const freshThreshold = 72 * (intensity / 5);
+  const fatiguedThreshold = 24 * (intensity / 5);
+  if (hours >= freshThreshold) return "fresh";
+  if (hours >= fatiguedThreshold) return "recovering";
   return "fatigued";
 }
 
@@ -77,7 +79,7 @@ export function useRecovery() {
         group,
         hoursSinceWorked,
         intensity: data?.intensity ?? 0,
-        status: getStatus(hoursSinceWorked),
+        status: getStatus(hoursSinceWorked, data?.intensity ?? 0),
       };
     });
 
