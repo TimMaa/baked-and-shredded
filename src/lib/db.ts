@@ -51,14 +51,14 @@ interface BakedDB {
 }
 
 const DB_NAME = "baked-and-shredded";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<BakedDB>> | null = null;
 
 export function getDb(): Promise<IDBPDatabase<BakedDB>> {
   if (!dbPromise) {
     dbPromise = openDB<BakedDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion) {
+      async upgrade(db, oldVersion, _newVersion, transaction) {
         if (oldVersion < 1) {
           const exercises = db.createObjectStore("exercises", {
             keyPath: "id",
@@ -110,6 +110,16 @@ export function getDb(): Promise<IDBPDatabase<BakedDB>> {
           db.createObjectStore("userPreferences", {
             keyPath: "id",
           });
+        }
+
+        if (oldVersion < 3) {
+          const store = transaction.objectStore("exercises");
+          for (const exercise of await store.getAll()) {
+            if (exercise.unilateral === undefined) {
+              exercise.unilateral = false;
+              await store.put(exercise);
+            }
+          }
         }
       },
     });

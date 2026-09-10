@@ -11,6 +11,7 @@ npm run lint       # oxlint
 npm run preview    # vite preview (serve built output)
 npm run serve      # build + preview
 npm run deploy     # build + wrangler pages deploy + cleanup old deployments
+npm run test       # vitest run
 ```
 
 ## Workflow
@@ -101,7 +102,11 @@ Project references with three configs:
 
 ## Linting
 
-OxLint (not ESLint). Config in `.oxlintrc.json`. No formatter, no test framework, no pre-commit hooks.
+OxLint (not ESLint). Config in `.oxlintrc.json`. No formatter, no pre-commit hooks.
+
+## Testing
+
+Vitest, introduced for `src/lib/db.ts` (see `src/lib/db.test.ts`). Config in `vitest.config.ts`. No other tests exist yet — this isn't a blanket "write tests" mandate, just infrastructure for testing IndexedDB logic against `fake-indexeddb` when a seam calls for it.
 
 ## PWA
 
@@ -126,3 +131,17 @@ The `deploy` script: type-check + build → wrangler pages deploy → cleanup ol
 ## Data export/import
 
 `src/lib/dataTransfer.ts`: `exportAllData()` dumps all 5 stores to JSON download. `importData()` parses and writes to IndexedDB. Migration from old SQLite app via `scripts/export-sqlite.mjs`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `TimMaa/baked-and-shredded`, using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five canonical labels (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout (root `CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.

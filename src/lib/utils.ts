@@ -18,3 +18,8 @@ export function localDateKeyToISO(dateKey: string): string {
   const [y, m, d] = dateKey.split("-").map(Number);
   return new Date(y, m - 1, d, 12, 0, 0).toISOString();
 }
+
+/** Formats a kg-unit target weight, making an unset weight explicit rather than silently omitting it. */
+export function formatTargetWeight(targetWeight: number | null): string {
+  return targetWeight == null ? "No target weight" : `${targetWeight} kg`;
+}

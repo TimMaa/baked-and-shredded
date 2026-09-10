@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { MuscleGroupCoverage } from "@/components/workouts/MuscleGroupCoverage";
 import { ExerciseSelector } from "@/components/workouts/ExerciseSelector";
+import { formatTargetWeight } from "@/lib/utils";
 import type { Exercise } from "@/types";
 import { ArrowLeft, Plus, Trash2, GripVertical, ChevronUp, ChevronDown, Pencil, Check, X, ArrowLeftRight } from "lucide-react";
 
@@ -251,9 +252,7 @@ export function WorkoutDetailPage() {
                     {we.sets} sets &times;{" "}
                     {we.targetUnit === "s"
                       ? `${we.targetWeight ?? 0}s`
-                      : `${we.targetReps} reps${
-                          we.targetWeight == null ? " · no target weight" : ` @ ${we.targetWeight}kg`
-                        }`}
+                      : `${we.targetReps} reps ${we.targetWeight == null ? "· " : "@ "}${formatTargetWeight(we.targetWeight)}`}
                     {we.unilateral && " · each side"}
                   </p>
                 )}

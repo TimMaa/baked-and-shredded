@@ -12,6 +12,9 @@ export function isConfigured(): boolean {
   return !!API_KEY;
 }
 
+const UNILATERAL_INSTRUCTION =
+  'Set "unilateral" to true if the exercise works one side/limb at a time (e.g. single-arm row, single-leg RDL, dead bug), false for bilateral movements (e.g. squat, bench press).';
+
 // --- Feature 1: Exercise Classification ---
 
 export interface ExerciseClassification {
@@ -43,7 +46,7 @@ focusAreas must include ALL of these muscle groups: ${muscleList}
 Rate each muscle group 0-5 (0=not involved, 5=primary mover).
 The total of all ratings should not exceed 25.
 Be accurate about which muscles are primary movers vs stabilizers.
-Set "unilateral" to true if the exercise works one side/limb at a time (e.g. single-arm row, single-leg RDL, dead bug), false for bilateral movements (e.g. squat, bench press).`,
+${UNILATERAL_INSTRUCTION}`,
       },
     ],
   });
@@ -103,7 +106,7 @@ Return ONLY a JSON object (no markdown, no code fences, no explanation):
 
 focusAreas must include ALL of these muscle groups: ${muscleList}
 Rate each 0-5 (0=not involved, 5=primary mover). Total per exercise should not exceed 25.
-Set "unilateral" to true if the exercise works one side/limb at a time (e.g. single-arm row, single-leg RDL, dead bug), false for bilateral movements.
+${UNILATERAL_INSTRUCTION}
 Use the EXACT exercise names as given above.`,
       },
     ],

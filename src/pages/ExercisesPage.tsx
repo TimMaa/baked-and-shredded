@@ -101,6 +101,7 @@ export function ExercisesPage() {
           tip: null,
           focusAreas: createDefaultMuscleRatings(),
           equipment: null,
+          unilateral: false,
         });
       }
     }
@@ -180,6 +181,7 @@ export function ExercisesPage() {
           tip: parts[2] || null,
           focusAreas: createDefaultMuscleRatings(),
           equipment: null,
+          unilateral: false,
         });
       }
     }

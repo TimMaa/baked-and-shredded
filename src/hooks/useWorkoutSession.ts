@@ -158,6 +158,15 @@ export function useWorkoutSession() {
     setStopwatchMs(0);
   }, []);
 
+  const applyHydrated = useCallback((hydrated: HydratedSession) => {
+    setSessionId(hydrated.sessionId);
+    setTotalSetsPlanned(hydrated.totalSetsPlanned);
+    setStartedAt(hydrated.startedAt);
+    setExerciseProgress(hydrated.exerciseProgress);
+    setCompletedSets(hydrated.completedSets);
+    setActiveSet(hydrated.activeSet);
+  }, []);
+
   // Resume active session from IndexedDB on mount
   useEffect(() => {
     let cancelled = false;
@@ -171,16 +180,11 @@ export function useWorkoutSession() {
       const hydrated = await hydrateSession(activeSession);
       if (cancelled) return;
 
-      setSessionId(hydrated.sessionId);
-      setTotalSetsPlanned(hydrated.totalSetsPlanned);
-      setStartedAt(hydrated.startedAt);
-      setExerciseProgress(hydrated.exerciseProgress);
-      setCompletedSets(hydrated.completedSets);
-      setActiveSet(hydrated.activeSet);
+      applyHydrated(hydrated);
       setIsResuming(false);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [applyHydrated]);
 
   const startSession = useCallback(
     async (
@@ -193,13 +197,7 @@ export function useWorkoutSession() {
       if (result.status === "conflict") {
         // An Active Session already exists (e.g. started in another tab).
         // Converge to it instead of creating a duplicate.
-        const hydrated = await hydrateSession(result.session);
-        setSessionId(hydrated.sessionId);
-        setTotalSetsPlanned(hydrated.totalSetsPlanned);
-        setStartedAt(hydrated.startedAt);
-        setExerciseProgress(hydrated.exerciseProgress);
-        setCompletedSets(hydrated.completedSets);
-        setActiveSet(hydrated.activeSet);
+        applyHydrated(await hydrateSession(result.session));
         return;
       }
 
@@ -224,7 +222,7 @@ export function useWorkoutSession() {
       const next = computeNextSet(progress, null);
       setActiveSet(next);
     },
-    []
+    [applyHydrated]
   );
 
   const confirmExpected = useCallback(async () => {

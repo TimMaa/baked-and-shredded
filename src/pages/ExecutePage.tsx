@@ -17,6 +17,7 @@ import {
 import { SessionStopwatch, formatStopwatchTime } from "@/components/sessions/SessionStopwatch";
 import * as db from "@/lib/db";
 import * as gemini from "@/lib/gemini";
+import { formatTargetWeight } from "@/lib/utils";
 import type { Workout, WorkoutExercise, Exercise } from "@/types";
 import { ratedMuscleGroups } from "@/lib/muscleGroups";
 import { Play, Square, Check, AlertTriangle, BarChart3, Shuffle, Sparkles, TrendingUp, Lightbulb } from "lucide-react";
@@ -333,11 +334,9 @@ export function ExecutePage() {
                   : `${activeSet.targetReps} reps`}
               </Badge>
               {activeSet.targetUnit === "kg" && (
-                activeSet.targetWeight != null ? (
-                  <Badge variant="secondary">{activeSet.targetWeight} kg</Badge>
-                ) : (
-                  <Badge variant="outline">No target weight</Badge>
-                )
+                <Badge variant={activeSet.targetWeight != null ? "secondary" : "outline"}>
+                  {formatTargetWeight(activeSet.targetWeight)}
+                </Badge>
               )}
             </div>
 
