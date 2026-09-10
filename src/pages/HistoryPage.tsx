@@ -4,7 +4,7 @@ import { useHistory, type DateRange } from "@/hooks/useHistory";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, toLocalDateKey } from "@/lib/utils";
 import { Trash2, ChevronDown, ChevronUp, Trophy, Calendar } from "lucide-react";
 import * as db from "@/lib/db";
 import { ALL_MUSCLE_GROUPS, getMuscleGroupLabel } from "@/lib/muscleGroups";
@@ -51,7 +51,7 @@ function TrainingCalendar({ sessions }: { sessions: { startedAt: string }[] }) {
   const lastDay = new Date(year, month + 1, 0);
   const startPad = (firstDay.getDay() + 6) % 7;
 
-  const sessionDates = new Set(sessions.map((s) => s.startedAt.slice(0, 10)));
+  const sessionDates = new Set(sessions.map((s) => toLocalDateKey(new Date(s.startedAt))));
 
   const days: (number | null)[] = [];
   for (let i = 0; i < startPad; i++) days.push(null);

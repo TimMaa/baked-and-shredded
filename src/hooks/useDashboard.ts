@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import * as db from "@/lib/db";
 import { ratedMuscleGroups } from "@/lib/muscleGroups";
 import * as gemini from "@/lib/gemini";
+import { toLocalDateKey } from "@/lib/utils";
 import type { Session, Workout } from "@/types";
 
 export interface LastSessionSummary {
@@ -83,15 +84,15 @@ export function useDashboard() {
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(d.getDate() + i);
-      const dateStr = d.toISOString().slice(0, 10);
-      const todayStr = now.toISOString().slice(0, 10);
+      const dateStr = toLocalDateKey(d);
+      const todayStr = toLocalDateKey(now);
 
       const hasWorkout = sessions.some((s) => {
         if (!s.completedAt) return false;
-        return s.startedAt.slice(0, 10) === dateStr;
+        return toLocalDateKey(new Date(s.startedAt)) === dateStr;
       });
 
-      const hasActivity = activities.some((a) => a.performedAt.slice(0, 10) === dateStr);
+      const hasActivity = activities.some((a) => toLocalDateKey(new Date(a.performedAt)) === dateStr);
 
       week.push({
         date: dateStr,

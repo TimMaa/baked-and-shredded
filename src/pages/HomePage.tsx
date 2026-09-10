@@ -7,6 +7,7 @@ import { useDashboard } from "@/hooks/useDashboard";
 import { useRecovery, type MuscleRecovery } from "@/hooks/useRecovery";
 import { useActivities } from "@/hooks/useActivities";
 import { getMuscleGroupLabel, createDefaultMuscleRatings } from "@/lib/muscleGroups";
+import { toLocalDateKey, localDateKeyToISO } from "@/lib/utils";
 import * as gemini from "@/lib/gemini";
 import { Play, Settings, Plus, Clock, CheckCircle2, Loader2, X } from "lucide-react";
 import type { WeekDay } from "@/hooks/useDashboard";
@@ -87,6 +88,7 @@ export function HomePage() {
   const [showLogActivity, setShowLogActivity] = useState(false);
   const [activityName, setActivityName] = useState("");
   const [activityDuration, setActivityDuration] = useState("");
+  const [activityDate, setActivityDate] = useState(() => toLocalDateKey(new Date()));
   const [savingActivity, setSavingActivity] = useState(false);
 
   const handleLogActivity = async () => {
@@ -102,16 +104,18 @@ export function HomePage() {
       }
     }
 
+    const isToday = activityDate === toLocalDateKey(new Date());
     await createActivity({
       name: activityName.trim(),
       durationMinutes: Number(activityDuration) || 0,
       muscleGroups,
-      performedAt: new Date().toISOString(),
+      performedAt: isToday ? new Date().toISOString() : localDateKeyToISO(activityDate),
       notes: null,
     });
 
     setActivityName("");
     setActivityDuration("");
+    setActivityDate(toLocalDateKey(new Date()));
     setShowLogActivity(false);
     setSavingActivity(false);
     await refreshActivities();
@@ -220,6 +224,15 @@ export function HomePage() {
                 value={activityDuration}
                 onChange={(e) => setActivityDuration(e.target.value)}
               />
+              <div>
+                <label className="text-xs text-muted-foreground">Date</label>
+                <Input
+                  type="date"
+                  value={activityDate}
+                  max={toLocalDateKey(new Date())}
+                  onChange={(e) => setActivityDate(e.target.value)}
+                />
+              </div>
               <Button
                 className="w-full"
                 size="sm"
