@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { WorkoutExercise, SessionSet } from "@/types";
+import type { WorkoutExercise, SessionSet, Session } from "@/types";
 import * as db from "@/lib/db";
 
 interface ExerciseProgress {
@@ -59,6 +59,58 @@ function computeNextSet(
   };
 }
 
+interface HydratedSession {
+  sessionId: number;
+  totalSetsPlanned: number;
+  startedAt: string;
+  exerciseProgress: ExerciseProgress[];
+  completedSets: (SessionSet & { exerciseName: string })[];
+  activeSet: ActiveSet | null;
+}
+
+async function hydrateSession(session: Session): Promise<HydratedSession> {
+  const wes = await db.getWorkoutExercises(session.workoutId);
+  const allExercises = await db.getAllExercises();
+  const sets = await db.getSessionSets(session.id!);
+
+  const exerciseMap = new Map(allExercises.map((e) => [e.id!, e.name]));
+
+  const progress: ExerciseProgress[] = wes.map((we) => {
+    const completedCount = sets.filter(
+      (s) => s.workoutExerciseId === we.id
+    ).length;
+    return {
+      exerciseId: we.exerciseId,
+      workoutExerciseId: we.id!,
+      exerciseName: exerciseMap.get(we.exerciseId) || "Unknown",
+      totalSets: we.sets,
+      completedSets: completedCount,
+      targetReps: we.targetReps,
+      targetWeight: we.targetWeight,
+      targetUnit: we.targetUnit,
+    };
+  });
+
+  const enrichedSets = sets
+    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+    .map((s) => ({
+      ...s,
+      exerciseName: exerciseMap.get(s.exerciseId) || "Unknown",
+    }));
+
+  const lastSet = enrichedSets[0];
+  const nextSet = computeNextSet(progress, lastSet?.workoutExerciseId ?? null);
+
+  return {
+    sessionId: session.id!,
+    totalSetsPlanned: session.totalSetsPlanned,
+    startedAt: session.startedAt,
+    exerciseProgress: progress,
+    completedSets: enrichedSets,
+    activeSet: nextSet,
+  };
+}
+
 export function useWorkoutSession() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [exerciseProgress, setExerciseProgress] = useState<ExerciseProgress[]>([]);
@@ -109,49 +161,15 @@ export function useWorkoutSession() {
         return;
       }
 
-      const wes = await db.getWorkoutExercises(activeSession.workoutId);
-      const allExercises = await db.getAllExercises();
-      const sets = await db.getSessionSets(activeSession.id!);
-
-      const exerciseMap = new Map(allExercises.map((e) => [e.id!, e.name]));
-
-      const progress: ExerciseProgress[] = wes.map((we) => {
-        const completedCount = sets.filter(
-          (s) => s.workoutExerciseId === we.id
-        ).length;
-        return {
-          exerciseId: we.exerciseId,
-          workoutExerciseId: we.id!,
-          exerciseName: exerciseMap.get(we.exerciseId) || "Unknown",
-          totalSets: we.sets,
-          completedSets: completedCount,
-          targetReps: we.targetReps,
-          targetWeight: we.targetWeight,
-          targetUnit: we.targetUnit,
-        };
-      });
-
-      const enrichedSets = sets
-        .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
-        .map((s) => ({
-          ...s,
-          exerciseName: exerciseMap.get(s.exerciseId) || "Unknown",
-        }));
-
+      const hydrated = await hydrateSession(activeSession);
       if (cancelled) return;
 
-      setSessionId(activeSession.id!);
-      setTotalSetsPlanned(activeSession.totalSetsPlanned);
-      setStartedAt(activeSession.startedAt);
-      setExerciseProgress(progress);
-      setCompletedSets(enrichedSets);
-
-      const lastSet = enrichedSets[0];
-      const nextSet = computeNextSet(
-        progress,
-        lastSet?.workoutExerciseId ?? null
-      );
-      setActiveSet(nextSet);
+      setSessionId(hydrated.sessionId);
+      setTotalSetsPlanned(hydrated.totalSetsPlanned);
+      setStartedAt(hydrated.startedAt);
+      setExerciseProgress(hydrated.exerciseProgress);
+      setCompletedSets(hydrated.completedSets);
+      setActiveSet(hydrated.activeSet);
       setIsResuming(false);
     })();
     return () => { cancelled = true; };
@@ -163,8 +181,22 @@ export function useWorkoutSession() {
       workoutExercises: (WorkoutExercise & { exerciseName: string })[]
     ) => {
       const total = workoutExercises.reduce((sum, we) => sum + we.sets, 0);
-      const id = await db.createSession(workoutId, total);
-      setSessionId(id);
+      const result = await db.createSession(workoutId, total);
+
+      if (result.status === "conflict") {
+        // An Active Session already exists (e.g. started in another tab).
+        // Converge to it instead of creating a duplicate.
+        const hydrated = await hydrateSession(result.session);
+        setSessionId(hydrated.sessionId);
+        setTotalSetsPlanned(hydrated.totalSetsPlanned);
+        setStartedAt(hydrated.startedAt);
+        setExerciseProgress(hydrated.exerciseProgress);
+        setCompletedSets(hydrated.completedSets);
+        setActiveSet(hydrated.activeSet);
+        return;
+      }
+
+      setSessionId(result.sessionId);
       setTotalSetsPlanned(total);
       setStartedAt(new Date().toISOString());
       setCompletedSets([]);
